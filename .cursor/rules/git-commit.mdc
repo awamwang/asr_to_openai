@@ -1,0 +1,103 @@
+---
+description: Git 提交规范（Conventional Commits + 中文提交信息）
+alwaysApply: true
+---
+
+# Git 提交规范
+
+本项目遵循 [Conventional Commits](https://www.conventionalcommits.org/)，**提交说明必须使用简体中文**。
+
+## 格式
+
+```
+<type>[!][(scope)]: <中文简述>
+
+[可选正文]
+
+[可选页脚]
+```
+
+- `type`：必填，见下表；必须小写
+- `scope`：可选，说明影响范围（推荐：`proxy`、`providers`、`audio`、`config`、`api`）；必须小写；文档类用 `docs` 或 `docs(<模块>)`，勿再设与 type 重复的 `doc` scope
+- `!`：可选，标记破坏性变更（也可仅在页脚写 `BREAKING CHANGE`）
+- 简述（subject）：必填，简体中文，不超过 72 字，不以句号（。/.）结尾；写「做了什么」，不写「为什么」
+- 正文（body）：可选，说明动机与背景；与 subject 之间空一行；建议每行不超过 72 字；可保留必要英文专有名词与代码标识
+- 页脚（footer）：可选，如 `BREAKING CHANGE: …`、`Refs: #123`、`Closes: #123`、`Fixes: #123`
+
+破坏性变更示例：
+
+```
+feat(proxy)!: 调整转写接口响应字段以对齐 OpenAI
+
+BREAKING CHANGE: /v1/audio/transcriptions 响应结构变更，客户端需同步升级
+```
+
+回滚示例：
+
+```
+revert: 新增 Grok 语音转写提供方
+
+This reverts commit <hash>.
+```
+
+（`revert` 的 subject 复述被回滚那条的简述；正文注明原 commit hash。）
+
+## type 类型
+
+| type | 含义 |
+|------|------|
+| feat | 新功能 |
+| fix | 缺陷修复 |
+| docs | 文档变更 |
+| style | 代码格式（不影响逻辑） |
+| refactor | 重构（非 feat/fix） |
+| perf | 性能优化 |
+| test | 测试相关 |
+| build | 构建或依赖变更 |
+| ci | CI 配置变更 |
+| chore | 杂项（工具、配置等） |
+| revert | 回滚提交 |
+
+选用对应 type：CI 改动用 `ci`，勿写成 `chore(ci)`；文档用 `docs`，勿叠 `docs(doc)`。
+
+## 简述要求
+
+- 必须使用简体中文；**禁止**纯英文 subject（错误：`fix: update login bug`）
+- 祈使语气：用「修复 / 新增 / 调整 / 优化」，避免「已修复 / 完成了 / 临时改一下」
+- subject 描述变更本身（做什么），动机放正文；不要堆砌文件名或 diff 罗列
+- **禁止**含糊简述：`update`、`fix bug`、`临时提交`、`wip`、`misc`
+- 一条提交只做一类变更；勿把无关改动塞进同一 commit
+- 可保留专有名词：`OpenAI`、`DashScope`、`Grok`、ASR、API 路径等
+
+## 示例
+
+```
+feat(proxy): 新增 OpenAI 兼容的语音转写接口
+
+fix(providers): 修复阿里云 ASR 超时未重试的问题
+
+refactor(audio): 抽取音频格式转换公共逻辑
+
+docs(config): 补充配置项与环境变量说明
+
+ci: 调整测试工作流触发条件
+
+chore: 更新依赖锁定与本地启动脚本
+
+revert: 新增 Grok 语音转写提供方
+```
+
+## Cursor / Agent 约束
+
+- **仅在用户明确要求**创建提交时才执行 `git commit`；不要主动提交
+- 不要主动 `git push`，除非用户明确要求
+- 提交信息必须符合上述格式；使用 HEREDOC 或等价多行方式传递 message，保证换行与格式完整
+- 不要用 `--no-verify` 跳过 hook，除非用户明确要求
+- 不要更新 git config；不要 `push --force` 到 main/master（除非用户明确要求）
+- 避免 `commit --amend`，除非用户明确要求且符合安全条件（未推送、且为本次会话自己创建的 commit）
+- **禁止**提交密钥与敏感文件：`.env`、`credentials.json`、含 token/私钥的文件等
+- 不要把 `node_modules`、构建产物等无关文件纳入提交（除非项目约定需要）
+
+## Source Control「生成提交信息」
+
+左侧源代码管理里的 ✨ 生成提交信息**不会**读取 `.cursor/rules`，只会读取仓库根目录的 `.cursorrules`。中文与 Conventional Commits 约束已同步写在 `.cursorrules`；两处规范必须保持一致。

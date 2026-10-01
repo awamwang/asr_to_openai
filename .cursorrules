@@ -1,0 +1,39 @@
+# Git 提交信息（Source Control 自动生成）
+
+When Cursor auto-generates a Git commit message for this repository, follow ALL rules below.
+
+## Hard requirements
+
+1. MUST use Conventional Commits: `<type>[!][(scope)]: <subject>`（scope optional）
+2. MUST write the subject (and body if any) in Simplified Chinese (简体中文)
+3. NEVER write the commit subject entirely in English
+4. NEVER use vague subjects: `update`, `fix bug`, `wip`, `misc`, `临时提交`
+5. Keep ONE concise subject line (≤72 characters); do NOT end with `。` or `.`
+6. Subject = WHAT changed (祈使：修复/新增/调整); body = WHY (optional); blank line between subject and body; wrap body ~72 chars; no file-list dump
+7. One commit = one concern; do NOT list filenames in the subject
+8. Allowed types (lowercase): feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+9. Preferred scopes for this repo (lowercase, optional): `proxy`, `providers`, `audio`, `config`, `api`；文档用 `docs` / `docs(<模块>)`，勿用 `docs(doc)`；CI 用 type `ci`，勿用 `chore(ci)`
+10. Breaking change: use `type(scope)!: …` and/or a footer `BREAKING CHANGE: …` in Chinese
+11. Revert: `revert: <原提交简述>` with body `This reverts commit <hash>.`
+12. Footers when useful: `Refs: #123` / `Closes: #123` / `Fixes: #123`
+
+## Examples (copy the style, not the English)
+
+- feat(proxy): 新增 OpenAI 兼容的语音转写接口
+- fix(providers): 修复阿里云 ASR 超时未重试的问题
+- refactor(audio): 抽取音频格式转换公共逻辑
+- docs(config): 补充配置项与环境变量说明
+- ci: 调整测试工作流触发条件
+- chore: 更新依赖锁定与本地启动脚本
+- revert: 新增 Grok 语音转写提供方
+
+## Wrong vs right
+
+- ❌ `Refactor auth module for better performance.`
+- ✅ `refactor(proxy): 优化转写请求校验以减少无效上游调用`
+- ❌ `fix: update login bug`
+- ✅ `fix(providers): 修复阿里云 ASR 超时未重试的问题`
+- ❌ `chore(ci): update workflow`
+- ✅ `ci: 调整测试工作流触发条件`
+- ❌ `docs(doc): update readme`
+- ✅ `docs: 补充本地开发环境说明`
