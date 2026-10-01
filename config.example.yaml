@@ -27,6 +27,7 @@ providers:
     # 或单模型：DASHSCOPE_ASR_MODEL / ALIYUN_ASR_MODEL
     models:
       - qwen-audio-3.1-asr-flash-streaming
+      - qwen-audio-3.0-asr-flash
       - qwen3-asr-flash-realtime
 
   grok:

@@ -18,7 +18,14 @@ from asr_proxy.app import create_app, _find_audio_b64, _try_decode_b64
 from asr_proxy.config import AppConfig, ProviderConfig, load_config
 from asr_proxy.providers import ProviderRouter
 from asr_proxy.providers.base import AsrResult
-from asr_proxy.providers.aliyun import AliyunProvider
+from asr_proxy.providers.aliyun import (
+    AliyunProvider,
+    MODE_FILETRANS,
+    MODE_FLASH,
+    MODE_RECOGNITION,
+    resolve_asr_mode,
+    _extract_flash_text,
+)
 from asr_proxy.providers.grok import GrokProvider
 
 WAV_PATH = ROOT / "test_asr_16k.wav"
@@ -85,6 +92,36 @@ def cfg_both_enabled() -> AppConfig:
     )
 
 
+class TestAsrModeRouting:
+    def test_resolve_by_suffix(self):
+        assert resolve_asr_mode("qwen-audio-3.1-asr-flash-streaming") == MODE_RECOGNITION
+        assert resolve_asr_mode("qwen3-asr-flash-realtime") == MODE_RECOGNITION
+        assert resolve_asr_mode("qwen3-asr-flash-realtime-2025-10-27") == MODE_RECOGNITION
+        assert resolve_asr_mode("fun-asr-realtime") == MODE_RECOGNITION
+        assert resolve_asr_mode("qwen-audio-3.0-asr-flash") == MODE_FLASH
+        assert resolve_asr_mode("qwen-audio-3.1-asr-flash") == MODE_FLASH
+        assert resolve_asr_mode("qwen3-asr-flash") == MODE_FLASH
+        assert resolve_asr_mode("qwen3-asr-flash-2025-09-08") == MODE_FLASH
+        assert resolve_asr_mode("fun-asr-flash-2026-06-15") == MODE_FLASH
+        assert resolve_asr_mode("qwen-audio-3.0-asr-flash-filetrans") == MODE_FILETRANS
+        assert resolve_asr_mode("qwen3-asr-flash-filetrans") == MODE_FILETRANS
+
+    def test_extract_flash_text(self):
+        text, segments, duration = _extract_flash_text({
+            "text": "你好世界",
+            "output": {
+                "sentence": {
+                    "text": "你好世界",
+                    "begin_time": 100,
+                    "end_time": 1500,
+                },
+            },
+        })
+        assert text == "你好世界"
+        assert duration == 1.5
+        assert segments[0]["text"] == "你好世界"
+
+
 class TestConfig:
     def test_example_config_loads(self):
         cfg = load_config(ROOT / "config.example.yaml")
@@ -93,6 +130,7 @@ class TestConfig:
         assert "aliyun" in cfg.auto_order
         assert cfg.providers["aliyun"].models
         assert cfg.providers["aliyun"].model == cfg.providers["aliyun"].models[0]
+        assert "qwen-audio-3.0-asr-flash" in cfg.providers["aliyun"].models
 
     def test_api_key_enables_provider(self, cfg_aliyun_only):
         enabled = cfg_aliyun_only.enabled_providers()
@@ -246,6 +284,53 @@ class TestAutoFailover:
         p = GrokProvider(cfg_both_enabled.providers["grok"])
         with pytest.raises(NotImplementedError):
             p.recognize(wav_bytes)
+
+    def test_flash_model_uses_multimodal_path(self, cfg_aliyun_only, wav_bytes):
+        p = AliyunProvider(cfg_aliyun_only.providers["aliyun"], ffmpeg_path="ffmpeg")
+        called = {}
+
+        class FakeResp:
+            status_code = 200
+            code = None
+            message = "ok"
+            output = {
+                "text": "非流式识别成功",
+                "output": {"sentence": {"text": "非流式识别成功"}},
+            }
+
+        def fake_call(**kwargs):
+            called.update(kwargs)
+            return FakeResp()
+
+        mock_file = type("F", (), {"read": lambda self: b"RIFF"})()
+
+        with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
+            with patch("asr_proxy.providers.aliyun.cleanup"):
+                with patch("builtins.open", return_value=mock_file):
+                    with patch(
+                        "dashscope.MultiModalConversation.call",
+                        side_effect=fake_call,
+                    ):
+                        result = p.recognize(
+                            wav_bytes,
+                            filename="test.wav",
+                            model="qwen-audio-3.0-asr-flash",
+                        )
+        assert result.text == "非流式识别成功"
+        assert result.model == "qwen-audio-3.0-asr-flash"
+        assert called.get("model") == "qwen-audio-3.0-asr-flash"
+        assert called.get("format") == "wav"
+
+    def test_filetrans_model_raises_clear_error(self, cfg_aliyun_only, wav_bytes):
+        p = AliyunProvider(cfg_aliyun_only.providers["aliyun"], ffmpeg_path="ffmpeg")
+        with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
+            with patch("asr_proxy.providers.aliyun.cleanup"):
+                with pytest.raises(RuntimeError, match="filetrans"):
+                    p.recognize(
+                        wav_bytes,
+                        filename="test.wav",
+                        model="qwen-audio-3.0-asr-flash-filetrans",
+                    )
 
 
 class TestHttpApi:
