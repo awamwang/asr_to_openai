@@ -8,6 +8,7 @@ import os
 from typing import Any, List, Optional
 
 from fastapi import FastAPI, Form, Request, UploadFile
+from fastapi.responses import JSONResponse
 
 from asr_proxy.config import AppConfig, load_config
 from asr_proxy.providers import ProviderRouter
@@ -21,16 +22,31 @@ def _ensure_log_path(path: str) -> str:
     return os.path.join(root, path)
 
 
+def _error_response(status_code: int, message: str, **extra: Any) -> JSONResponse:
+    """统一错误响应：真实 HTTP 状态码，绝不伪装成 200。"""
+    body: dict = {"error": {"message": message, "status_code": status_code}}
+    if extra:
+        body["error"].update(extra)
+    return JSONResponse(status_code=status_code, content=body)
+
+
+def _extract_language(data: dict) -> Optional[str]:
+    """从闪电说请求体提取 asr_options.language。"""
+    opts = data.get("asr_options")
+    if isinstance(opts, dict):
+        lang = opts.get("language")
+        if isinstance(lang, str) and lang.strip():
+            return lang.strip()
+    lang = data.get("language")
+    if isinstance(lang, str) and lang.strip():
+        return lang.strip()
+    return None
+
+
 def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
     """创建 FastAPI 应用。"""
     cfg = cfg or load_config()
-    router = ProviderRouter(cfg)
     log_file = _ensure_log_path(cfg.log_file)
-
-    app = FastAPI(title="ASR to OpenAI Proxy", version="1.0.0")
-    app.state.cfg = cfg
-    app.state.router_asr = router
-    app.state.log_file = log_file
 
     def _log(msg: str) -> None:
         try:
@@ -39,30 +55,13 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         except Exception:
             pass
 
-    def _log_recognize_result(
-        tag: str,
-        requested: str,
-        result=None,
-        errors: Optional[List[str]] = None,
-    ) -> None:
-        """记录本次实际使用的模型，以及失败跳过的模型。"""
-        skipped = errors or []
-        if result is not None:
-            used = (
-                f"{result.provider}/{result.model}"
-                if result.model else (result.provider or "?")
-            )
-            _log(
-                f"[{tag}] 使用模型={used} "
-                f"请求模型={requested!r} "
-                f"跳过={skipped or '无'}"
-            )
-        else:
-            _log(
-                f"[{tag}] 识别失败 "
-                f"请求模型={requested!r} "
-                f"跳过={skipped or '无'}"
-            )
+    # 公共路由层统一打印：使用模型 / 失败跳过（覆盖所有服务商）
+    router = ProviderRouter(cfg, log_fn=_log)
+
+    app = FastAPI(title="ASR to OpenAI Proxy", version="1.0.0")
+    app.state.cfg = cfg
+    app.state.router_asr = router
+    app.state.log_file = log_file
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
@@ -130,16 +129,19 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
     async def transcribe(
         file: UploadFile,
         model: str = Form("auto"),
+        language: Optional[str] = Form(None),
     ):
         audio_bytes = await file.read()
         if not audio_bytes:
-            return {"error": {"message": "empty audio", "status_code": 400}}
+            return _error_response(400, "empty audio")
         _log(f"[transcribe] file={file.filename} bytes={len(audio_bytes)} 请求模型={model!r}")
         try:
             result, errors = router.recognize(
-                audio_bytes, model=model, filename=file.filename or "audio.wav",
+                audio_bytes,
+                model=model,
+                filename=file.filename or "audio.wav",
+                language=language,
             )
-            _log_recognize_result("transcribe", model, result=result, errors=errors)
             _log(f"[transcribe] OK text={result.text!r}")
             return {
                 "task": "transcribe",
@@ -151,10 +153,8 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 "model": f"{result.provider}/{result.model}" if result.model else result.provider,
             }
         except Exception as e:
-            # router 全部失败时错误信息里已含各模型失败原因
-            _log_recognize_result("transcribe", model, result=None, errors=[str(e)])
             _log(f"[transcribe] EXCEPTION {type(e).__name__}: {e}")
-            return {"error": {"message": f"{type(e).__name__}: {e}", "status_code": 500}}
+            return _error_response(502, f"{type(e).__name__}: {e}")
 
     # ---- 闪电说自定义 ASR：/chat/completions + JSON base64 ----
 
@@ -166,47 +166,62 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
             data = json.loads(body.decode("utf-8"))
         except Exception as e:
             _log(f"[chat] body parse error: {type(e).__name__}: {e}")
-            return {"choices": [{"message": {"content": ""}}]}
+            return _error_response(400, f"invalid JSON body: {type(e).__name__}: {e}")
+
+        if not isinstance(data, dict):
+            return _error_response(400, "JSON body must be an object")
 
         structure = _describe_structure(data)
         _log("[chat] BODY_STRUCTURE:\n" + "\n".join(structure))
 
         model = str(data.get("model") or "auto")
+        language = _extract_language(data)
         candidates = _find_audio_b64(data)
         if not candidates:
             _log("[chat] no audio base64 found in body")
-            return {"choices": [{"message": {"content": ""}}]}
+            return _error_response(400, "no audio base64 found in request body")
 
+        last_error = ""
         for i, b64str in enumerate(candidates):
             try:
                 audio_bytes = _try_decode_b64(b64str)
                 if len(audio_bytes) < 100:
+                    last_error = f"candidate[{i}] audio too short ({len(audio_bytes)} bytes)"
                     continue
-                _log(f"[chat] candidate[{i}] decoded bytes={len(audio_bytes)} 请求模型={model!r}")
-                result, errors = router.recognize(
-                    audio_bytes, model=model, filename="audio.wav",
+                _log(
+                    f"[chat] candidate[{i}] decoded bytes={len(audio_bytes)} "
+                    f"请求模型={model!r} language={language!r}"
                 )
-                _log_recognize_result("chat", model, result=result, errors=errors)
+                result, errors = router.recognize(
+                    audio_bytes,
+                    model=model,
+                    filename="audio.wav",
+                    language=language,
+                )
                 if result.text:
                     used = (
                         f"{result.provider}/{result.model}"
                         if result.model else result.provider
                     )
                     _log(f"[chat] OK text={result.text!r}")
+                    # 与阿里云成功路径一致：闪电说只读 choices[0].message.content
                     return {
                         "choices": [{"message": {"content": result.text}}],
                         "model": used,
                         "provider": result.provider,
                     }
+                last_error = f"candidate[{i}] empty text; failover={errors}"
             except Exception as e:
-                _log_recognize_result(
-                    "chat", model, result=None, errors=[f"{type(e).__name__}: {e}"],
-                )
-                _log(f"[chat] candidate[{i}] error: {type(e).__name__}: {e}")
+                last_error = f"{type(e).__name__}: {e}"
+                _log(f"[chat] candidate[{i}] error: {last_error}")
                 continue
 
-        _log("[chat] recognition produced no text")
-        return {"choices": [{"message": {"content": ""}}]}
+        _log(f"[chat] recognition failed: {last_error}")
+        return _error_response(
+            502,
+            last_error or "recognition produced no text",
+            hint="检查模型名（groq/... / aliyun/... / auto）、api_key，以及 groq.proxy 是否可达",
+        )
 
     return app
 

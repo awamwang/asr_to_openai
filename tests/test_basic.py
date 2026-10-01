@@ -26,7 +26,7 @@ from asr_proxy.providers.aliyun import (
     resolve_asr_mode,
     _extract_flash_text,
 )
-from asr_proxy.providers.grok import GrokProvider
+from asr_proxy.providers.groq import GroqProvider
 
 WAV_PATH = ROOT / "test_asr_16k.wav"
 
@@ -44,7 +44,7 @@ def cfg_aliyun_only() -> AppConfig:
         port=8004,
         log_file=str(ROOT / "test_asr_proxy.log"),
         ffmpeg_path=os.environ.get("FFMPEG_PATH", "ffmpeg"),
-        auto_order=["aliyun", "grok"],
+        auto_order=["aliyun", "groq"],
         providers={
             "aliyun": ProviderConfig(
                 name="aliyun",
@@ -55,10 +55,10 @@ def cfg_aliyun_only() -> AppConfig:
                     "qwen3-asr-flash-realtime",
                 ],
             ),
-            "grok": ProviderConfig(
-                name="grok",
+            "groq": ProviderConfig(
+                name="groq",
                 api_key="",
-                base_url="https://api.x.ai/v1",
+                base_url="https://api.groq.com/openai/v1",
                 models=[],
             ),
         },
@@ -72,7 +72,7 @@ def cfg_both_enabled() -> AppConfig:
         port=8004,
         log_file=str(ROOT / "test_asr_proxy.log"),
         ffmpeg_path="ffmpeg",
-        auto_order=["grok", "aliyun"],
+        auto_order=["groq", "aliyun"],
         providers={
             "aliyun": ProviderConfig(
                 name="aliyun",
@@ -82,11 +82,12 @@ def cfg_both_enabled() -> AppConfig:
                     "qwen3-asr-flash-realtime",
                 ],
             ),
-            "grok": ProviderConfig(
-                name="grok",
-                api_key="xai-test-key",
-                base_url="https://api.x.ai/v1",
-                models=["grok-stt", "grok-stt-alt"],
+            "groq": ProviderConfig(
+                name="groq",
+                api_key="gsk-test-key",
+                base_url="https://api.groq.com/openai/v1",
+                proxy="http://127.0.0.1:7881",
+                models=["whisper-large-v3", "whisper-large-v3-turbo"],
             ),
         },
     )
@@ -126,11 +127,13 @@ class TestConfig:
     def test_example_config_loads(self):
         cfg = load_config(ROOT / "config.example.yaml")
         assert "aliyun" in cfg.providers
-        assert "grok" in cfg.providers
+        assert "groq" in cfg.providers
         assert "aliyun" in cfg.auto_order
         assert cfg.providers["aliyun"].models
         assert cfg.providers["aliyun"].model == cfg.providers["aliyun"].models[0]
         assert "qwen-audio-3.0-asr-flash" in cfg.providers["aliyun"].models
+        assert "whisper-large-v3" in cfg.providers["groq"].models
+        assert "groq.com" in cfg.providers["groq"].base_url
 
     def test_api_key_enables_provider(self, cfg_aliyun_only):
         enabled = cfg_aliyun_only.enabled_providers()
@@ -139,7 +142,7 @@ class TestConfig:
     def test_empty_key_disables(self):
         cfg = AppConfig(providers={
             "aliyun": ProviderConfig(name="aliyun", api_key=""),
-            "grok": ProviderConfig(name="grok", api_key="  "),
+            "groq": ProviderConfig(name="groq", api_key="  "),
         })
         assert cfg.enabled_providers() == []
 
@@ -165,22 +168,26 @@ class TestAudioHelpers:
 
 
 class TestAutoFailover:
-    def test_auto_skips_grok_stub_to_aliyun(self, cfg_both_enabled, wav_bytes):
+    def test_auto_skips_grok_failure_to_aliyun(self, cfg_both_enabled, wav_bytes):
         router = ProviderRouter(cfg_both_enabled)
 
-        def fake_aliyun_recognize(self, audio_bytes, filename="audio.wav", model=None):
+        def fake_aliyun_recognize(self, audio_bytes, filename="audio.wav", model=None, language=None):
             return AsrResult(
                 text="你好世界",
                 provider="aliyun",
                 model=model or "qwen-audio-3.1-asr-flash-streaming",
             )
 
+        def fake_grok_recognize(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            raise RuntimeError("Groq 转写错误 status=401")
+
         with patch.object(AliyunProvider, "recognize", fake_aliyun_recognize):
-            result, errors = router.recognize(wav_bytes, model="auto")
+            with patch.object(GroqProvider, "recognize", fake_grok_recognize):
+                result, errors = router.recognize(wav_bytes, model="auto")
         assert result.text == "你好世界"
         assert result.provider == "aliyun"
         # grok 在 auto_order 最前，应先失败再切到 aliyun
-        assert any("grok" in e.lower() or "NotImplemented" in e for e in errors)
+        assert any("groq" in e.lower() for e in errors)
         # 成功后记忆，下次 auto 从 aliyun 开始
         assert router._last_provider == "aliyun"
 
@@ -188,16 +195,16 @@ class TestAutoFailover:
         router = ProviderRouter(cfg_both_enabled)
         calls = []
 
-        def fake_aliyun(self, audio_bytes, filename="audio.wav", model=None):
+        def fake_aliyun(self, audio_bytes, filename="audio.wav", model=None, language=None):
             calls.append(("aliyun", model))
             return AsrResult(text="ok", provider="aliyun", model=model or "m1")
 
-        def fake_grok(self, audio_bytes, filename="audio.wav", model=None):
-            calls.append(("grok", model))
-            raise NotImplementedError("stub")
+        def fake_grok(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            calls.append(("groq", model))
+            raise RuntimeError("mock groq fail")
 
         with patch.object(AliyunProvider, "recognize", fake_aliyun):
-            with patch.object(GrokProvider, "recognize", fake_grok):
+            with patch.object(GroqProvider, "recognize", fake_grok):
                 router.recognize(wav_bytes, model="auto")
                 calls.clear()
                 router.recognize(wav_bytes, model="auto")
@@ -210,15 +217,15 @@ class TestAutoFailover:
         candidates = router.resolve("auto")
         # 每个服务商只出现一次
         names = [c.provider.name for c in candidates]
-        assert names == ["grok", "aliyun"]
-        assert candidates[0].model == "grok-stt"
+        assert names == ["groq", "aliyun"]
+        assert candidates[0].model == "whisper-large-v3"
         assert candidates[1].model == "qwen-audio-3.1-asr-flash-streaming"
 
     def test_provider_auto_switches_models(self, cfg_both_enabled, wav_bytes):
         router = ProviderRouter(cfg_both_enabled)
         tried = []
 
-        def fake(self, audio_bytes, filename="audio.wav", model=None):
+        def fake(self, audio_bytes, filename="audio.wav", model=None, language=None):
             tried.append(model)
             if model == "qwen-audio-3.1-asr-flash-streaming":
                 raise RuntimeError("first model fail")
@@ -241,11 +248,30 @@ class TestAutoFailover:
             "qwen-audio-3.1-asr-flash-streaming",
         ]
 
+    def test_router_logs_used_and_skipped(self, cfg_both_enabled, wav_bytes):
+        logs: list[str] = []
+
+        def fake_aliyun(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            return AsrResult(text="ok", provider="aliyun", model=model or "m1")
+
+        def fake_grok(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            raise NotImplementedError("stub")
+
+        router = ProviderRouter(cfg_both_enabled, log_fn=logs.append)
+        with patch.object(AliyunProvider, "recognize", fake_aliyun):
+            with patch.object(GroqProvider, "recognize", fake_grok):
+                router.recognize(wav_bytes, model="auto")
+
+        joined = "\n".join(logs)
+        assert "使用模型=aliyun/" in joined
+        assert "跳过=" in joined
+        assert any("groq" in line for line in logs if "跳过=" in line)
+
     def test_explicit_provider_slash_model(self, cfg_both_enabled, wav_bytes):
         router = ProviderRouter(cfg_both_enabled)
         used = []
 
-        def fake(self, audio_bytes, filename="audio.wav", model=None):
+        def fake(self, audio_bytes, filename="audio.wav", model=None, language=None):
             used.append(model)
             return AsrResult(text="指定模型", provider="aliyun", model=model)
 
@@ -260,7 +286,7 @@ class TestAutoFailover:
     def test_auto_all_fail(self, cfg_both_enabled, wav_bytes):
         router = ProviderRouter(cfg_both_enabled)
 
-        def boom(self, audio_bytes, filename="audio.wav", model=None):
+        def boom(self, audio_bytes, filename="audio.wav", model=None, language=None):
             raise RuntimeError("mock fail")
 
         with patch.object(AliyunProvider, "recognize", boom):
@@ -270,7 +296,7 @@ class TestAutoFailover:
     def test_explicit_model_aliyun_legacy(self, cfg_both_enabled, wav_bytes):
         router = ProviderRouter(cfg_both_enabled)
 
-        def fake(self, audio_bytes, filename="audio.wav", model=None):
+        def fake(self, audio_bytes, filename="audio.wav", model=None, language=None):
             return AsrResult(text="指定模型", provider="aliyun", model=model)
 
         with patch.object(AliyunProvider, "recognize", fake):
@@ -280,9 +306,74 @@ class TestAutoFailover:
         assert result.text == "指定模型"
         assert errors == []
 
-    def test_grok_raises_not_implemented(self, cfg_both_enabled, wav_bytes):
-        p = GrokProvider(cfg_both_enabled.providers["grok"])
-        with pytest.raises(NotImplementedError):
+    def test_grok_recognize_posts_multipart(self, cfg_both_enabled, wav_bytes):
+        """断言发往 Groq /audio/transcriptions 的请求契约。"""
+        captured = {}
+
+        class FakeResp:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {
+                    "text": "hello from groq",
+                    "language": "en",
+                    "duration": 1.25,
+                    "segments": [
+                        {"id": 0, "start": 0.0, "end": 1.25, "text": "hello from groq"},
+                    ],
+                }
+
+        class FakeClient:
+            def post(self, url, headers=None, data=None, files=None):
+                captured["url"] = url
+                captured["headers"] = headers
+                captured["data"] = data
+                captured["files"] = files
+                return FakeResp()
+
+            def close(self):
+                pass
+
+        p = GroqProvider(
+            cfg_both_enabled.providers["groq"],
+            client=FakeClient(),
+        )
+        result = p.recognize(wav_bytes, filename="voice.wav", model="whisper-large-v3")
+
+        assert result.text == "hello from groq"
+        assert result.language == "en"
+        assert result.duration == 1.25
+        assert result.provider == "groq"
+        assert result.model == "whisper-large-v3"
+        assert result.segments and result.segments[0]["text"] == "hello from groq"
+
+        assert captured["url"] == "https://api.groq.com/openai/v1/audio/transcriptions"
+        assert captured["headers"]["Authorization"] == "Bearer gsk-test-key"
+        assert captured["data"]["model"] == "whisper-large-v3"
+        assert captured["data"]["response_format"] == "verbose_json"
+        filename, content, content_type = captured["files"]["file"]
+        assert filename == "voice.wav"
+        assert content == wav_bytes
+        assert content_type == "audio/wav"
+
+    def test_grok_upstream_error_raises(self, cfg_both_enabled, wav_bytes):
+        class FakeResp:
+            status_code = 401
+            text = '{"error":"Invalid API Key"}'
+
+            def json(self):
+                return {"error": "Invalid API Key"}
+
+        class FakeClient:
+            def post(self, url, headers=None, data=None, files=None):
+                return FakeResp()
+
+            def close(self):
+                pass
+
+        p = GroqProvider(cfg_both_enabled.providers["groq"], client=FakeClient())
+        with pytest.raises(RuntimeError, match="status=401"):
             p.recognize(wav_bytes)
 
     def test_flash_model_uses_multimodal_path(self, cfg_aliyun_only, wav_bytes):
@@ -357,7 +448,7 @@ class TestHttpApi:
         client = TestClient(app)
         b64 = base64.b64encode(wav_bytes).decode()
 
-        def fake(self, audio_bytes, filename="audio.wav", model=None):
+        def fake(self, audio_bytes, filename="audio.wav", model=None, language=None):
             assert len(audio_bytes) == len(wav_bytes)
             return AsrResult(
                 text="闪电说测试文本",
@@ -387,7 +478,7 @@ class TestHttpApi:
         app = create_app(cfg_aliyun_only)
         client = TestClient(app)
 
-        def fake(self, audio_bytes, filename="audio.wav", model=None):
+        def fake(self, audio_bytes, filename="audio.wav", model=None, language=None):
             return AsrResult(
                 text="multipart识别",
                 language="chinese",
@@ -408,6 +499,47 @@ class TestHttpApi:
         assert data["text"] == "multipart识别"
         assert data["provider"] == "aliyun"
         assert data["model"].startswith("aliyun/")
+
+    def test_chat_failure_returns_non_200(self, cfg_aliyun_only, wav_bytes):
+        app = create_app(cfg_aliyun_only)
+        client = TestClient(app)
+        b64 = base64.b64encode(wav_bytes).decode()
+
+        def boom(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            raise RuntimeError("mock recognize fail")
+
+        body = {
+            "model": "auto",
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "input_audio",
+                    "input_audio": {"data": "data:audio/wav;base64," + b64},
+                }],
+            }],
+        }
+        with patch.object(AliyunProvider, "recognize", boom):
+            r = client.post("/chat/completions", json=body)
+        assert r.status_code == 502
+        assert "mock recognize fail" in r.json()["error"]["message"]
+
+    def test_chat_unknown_provider_returns_non_200(self, cfg_aliyun_only, wav_bytes):
+        app = create_app(cfg_aliyun_only)
+        client = TestClient(app)
+        b64 = base64.b64encode(wav_bytes).decode()
+        body = {
+            "model": "not-a-provider/auto",
+            "messages": [{
+                "role": "user",
+                "content": [{
+                    "type": "input_audio",
+                    "input_audio": {"data": "data:audio/wav;base64," + b64},
+                }],
+            }],
+        }
+        r = client.post("/chat/completions", json=body)
+        assert r.status_code == 502
+        assert "error" in r.json()
 
 
 @pytest.mark.integration

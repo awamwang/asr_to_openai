@@ -126,6 +126,7 @@ class AliyunProvider(AsrProvider):
         audio_bytes: bytes,
         filename: str = "audio.wav",
         model: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> AsrResult:
         if not self.enabled:
             raise RuntimeError("阿里云 ASR 未启用（缺少 api_key）")

@@ -14,6 +14,23 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = ROOT / "config.yaml"
 EXAMPLE_CONFIG_PATH = ROOT / "config.example.yaml"
 
+# SOCKS 别名：socks5:// 本地解析 DNS 访问 Groq 常 TLS 失败，需 socks5h://
+_SOCKS_ALIASES = {"socks5": "socks5h", "socks4": "socks4a"}
+
+
+def normalize_proxy(raw: Optional[str]) -> str:
+    """规范化代理地址：补 scheme，并把 socks5:// 纠正为 socks5h://。"""
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if "://" not in value:
+        value = "http://" + value
+    scheme, _, rest = value.partition("://")
+    scheme = scheme.lower()
+    if scheme in _SOCKS_ALIASES:
+        return f"{_SOCKS_ALIASES[scheme]}://{rest}"
+    return value
+
 
 def _normalize_models(
     models: Optional[Union[str, List[Any]]] = None,
@@ -49,6 +66,8 @@ class ProviderConfig:
     api_key: str = ""
     workspace_id: str = ""
     base_url: str = ""
+    proxy: str = ""
+    timeout: float = 300.0
     # 该服务商下可切换的模型列表（顺序即 provider/auto 尝试顺序）
     models: List[str] = field(default_factory=list)
 
@@ -79,7 +98,7 @@ class AppConfig:
     port: int = 8004
     log_file: str = "asr_proxy.log"
     ffmpeg_path: str = "ffmpeg"
-    auto_order: List[str] = field(default_factory=lambda: ["aliyun", "grok"])
+    auto_order: List[str] = field(default_factory=lambda: ["aliyun", "groq"])
     providers: Dict[str, ProviderConfig] = field(default_factory=dict)
 
     def enabled_providers(self) -> List[ProviderConfig]:
@@ -111,6 +130,16 @@ def _first_env(*keys: str, default: str = "") -> str:
     return default
 
 
+def _float_env(*keys: str, default: float = 300.0) -> float:
+    raw = _first_env(*keys)
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
     """合并 YAML 与环境变量，环境变量优先。"""
     raw = raw or {}
@@ -118,6 +147,11 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
         models=raw.get("models"),
         model=str(raw.get("model") or "").strip() or None,
     )
+    yaml_timeout = raw.get("timeout")
+    try:
+        default_timeout = float(yaml_timeout) if yaml_timeout is not None else 300.0
+    except (TypeError, ValueError):
+        default_timeout = 300.0
 
     if name == "aliyun":
         env_models = _first_env("DASHSCOPE_ASR_MODELS", "ALIYUN_ASR_MODELS")
@@ -137,24 +171,38 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
                 default=str(raw.get("workspace_id") or "").strip(),
             ),
             models=models,
+            timeout=_float_env("ALIYUN_TIMEOUT", default=default_timeout),
         )
-    if name == "grok":
-        env_models = _first_env("GROK_ASR_MODELS", "XAI_ASR_MODELS")
-        env_model = _first_env("GROK_ASR_MODEL", "XAI_ASR_MODEL")
+    if name in ("groq", "grok"):
+        # grok 为历史误写，统一按 Groq 处理
+        env_models = _first_env(
+            "GROQ_ASR_MODELS", "GROK_ASR_MODELS", "XAI_ASR_MODELS",
+        )
+        env_model = _first_env(
+            "GROQ_ASR_MODEL", "GROQ_DEFAULT_MODEL",
+            "GROK_ASR_MODEL", "XAI_ASR_MODEL",
+        )
         models = _normalize_models(
             models=env_models or None,
             model=env_model or None,
-        ) or yaml_models
+        ) or yaml_models or ["whisper-large-v3", "whisper-large-v3-turbo"]
         return ProviderConfig(
-            name=name,
+            name="groq",
             api_key=_first_env(
-                "XAI_API_KEY", "GROK_API_KEY",
+                "GROQ_API_KEY", "XAI_API_KEY", "GROK_API_KEY",
                 default=str(raw.get("api_key") or "").strip(),
             ),
             base_url=_first_env(
-                "GROK_BASE_URL", "XAI_BASE_URL",
-                default=str(raw.get("base_url") or "https://api.x.ai/v1").strip(),
+                "GROQ_BASE_URL", "GROK_BASE_URL", "XAI_BASE_URL",
+                default=str(
+                    raw.get("base_url") or "https://api.groq.com/openai/v1"
+                ).strip(),
             ),
+            proxy=normalize_proxy(_first_env(
+                "GROQ_PROXY", "GROK_PROXY",
+                default=str(raw.get("proxy") or "").strip(),
+            )),
+            timeout=_float_env("GROQ_TIMEOUT", "GROK_TIMEOUT", default=default_timeout),
             models=models,
         )
     return ProviderConfig(
@@ -162,8 +210,18 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
         api_key=str(raw.get("api_key") or "").strip(),
         workspace_id=str(raw.get("workspace_id") or "").strip(),
         base_url=str(raw.get("base_url") or "").strip(),
+        proxy=normalize_proxy(str(raw.get("proxy") or "").strip()),
+        timeout=default_timeout,
         models=yaml_models,
     )
+
+
+def canonical_provider_name(name: str) -> str:
+    """历史别名归一：grok → groq。"""
+    n = (name or "").strip().lower()
+    if n == "grok":
+        return "groq"
+    return n
 
 
 def load_config(path: Optional[str | Path] = None) -> AppConfig:
@@ -180,16 +238,26 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
     server = data.get("server") or {}
     providers_raw = data.get("providers") or {}
 
+    # 兼容旧配置键 grok → groq
+    if "groq" not in providers_raw and "grok" in providers_raw:
+        providers_raw = dict(providers_raw)
+        providers_raw["groq"] = providers_raw.pop("grok")
+
     providers: Dict[str, ProviderConfig] = {}
-    for name in ("aliyun", "grok"):
+    for name in ("aliyun", "groq"):
         providers[name] = _merge_provider(name, providers_raw.get(name) or {})
     for name, raw in providers_raw.items():
-        if name not in providers:
-            providers[name] = _merge_provider(name, raw or {})
+        canon = canonical_provider_name(name)
+        if canon not in providers:
+            providers[canon] = _merge_provider(canon, raw or {})
 
-    auto_order = data.get("auto_order") or ["aliyun", "grok"]
-    if not isinstance(auto_order, list):
-        auto_order = ["aliyun", "grok"]
+    auto_order_raw = data.get("auto_order") or ["aliyun", "groq"]
+    if not isinstance(auto_order_raw, list):
+        auto_order_raw = ["aliyun", "groq"]
+    auto_order = [canonical_provider_name(str(x)) for x in auto_order_raw]
+    # 去重保序
+    seen = set()
+    auto_order = [x for x in auto_order if not (x in seen or seen.add(x))]
 
     port_env = _env("ASR_PORT") or _env("DASHSCOPE_PORT")
     log_env = _env("ASR_LOG") or _env("DASHSCOPE_LOG")
@@ -199,6 +267,6 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         port=int(port_env or server.get("port") or 8004),
         log_file=log_env or str(server.get("log_file") or "asr_proxy.log"),
         ffmpeg_path=_first_env("FFMPEG_PATH", default=str(data.get("ffmpeg_path") or "ffmpeg")),
-        auto_order=[str(x) for x in auto_order],
+        auto_order=auto_order,
         providers=providers,
     )

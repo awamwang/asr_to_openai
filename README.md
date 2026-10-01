@@ -4,15 +4,17 @@
 
 - **主入口**：`main.py`
 - **默认端口**：`8004`（可用 `ASR_PORT` 或 config 修改）
-- **模型命名**：`服务商/模型`，例如 `aliyun/qwen-audio-3.1-asr-flash-streaming`
+- **模型命名**：`服务商/模型`，例如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`groq/whisper-large-v3`
 - **`auto`**：只在服务商之间切换（每家用其优先模型），出错则试下一个；成功后下次优先从该服务商开始
-- **`服务商/auto`**（如 `aliyun/auto`）：只在该服务商的模型列表内切换；成功后下次优先从该模型开始
+- **`服务商/auto`**（如 `aliyun/auto`、`groq/auto`）：只在该服务商的模型列表内切换；成功后下次优先从该模型开始
 
 当前能力：
 | 服务商 | 状态 | 启用条件 |
 |---|---|---|
 | 阿里云百炼 DashScope | ✅ 已实现 | `api_key` 非空 |
-| Grok（xAI） | ⏳ 占位 | 可先填 Key，调用会报未实现并被 `auto` 跳过 |
+| Groq Whisper | ✅ 已实现 | `api_key` 非空；国内通常还需 `proxy` |
+
+失败时接口返回 **真实 HTTP 错误码**（如 400/502），不再用 200 + 空文本糊弄客户端。
 
 ---
 
@@ -26,10 +28,16 @@ Content-Type: application/json
 body: { model, messages:[{ role, content:[{ type, input_audio:{ data: "<base64音频>" } }] }] }
 ```
 
-响应必须是：
+成功响应必须是：
 
 ```json
 { "choices": [ { "message": { "content": "识别出的文本" } } ] }
+```
+
+失败响应示例（HTTP 502）：
+
+```json
+{ "error": { "message": "...", "status_code": 502 } }
 ```
 
 ---
@@ -60,10 +68,13 @@ providers:
     models:
       - qwen-audio-3.1-asr-flash-streaming
       - qwen3-asr-flash-realtime
-  grok:
-    api_key: ""          # 占位，填了也会启用，但识别尚未实现
-    base_url: "https://api.x.ai/v1"
-    models: []
+  groq:
+    api_key: "gsk_你的Key"
+    base_url: "https://api.groq.com/openai/v1"
+    proxy: "http://127.0.0.1:7881"   # 国内访问 Groq 通常需要
+    models:
+      - whisper-large-v3
+      - whisper-large-v3-turbo
 ```
 
 也可用环境变量（优先于 YAML）：
@@ -71,7 +82,7 @@ providers:
 | 服务商 | 环境变量 |
 |---|---|
 | 阿里云 | `DASHSCOPE_API_KEY` / `ALIYUN_API_KEY`，`DASHSCOPE_WORKSPACE_ID`，`DASHSCOPE_ASR_MODELS`（逗号分隔）或 `DASHSCOPE_ASR_MODEL` |
-| Grok | `XAI_API_KEY` / `GROK_API_KEY`，`GROK_BASE_URL`，`GROK_ASR_MODELS` / `GROK_ASR_MODEL` |
+| Groq | `GROQ_API_KEY`，`GROQ_BASE_URL`，`GROQ_PROXY`，`GROQ_TIMEOUT`，`GROQ_ASR_MODELS` / `GROQ_DEFAULT_MODEL` |
 | 通用 | `ASR_PORT`，`ASR_LOG`，`FFMPEG_PATH` |
 
 ### 3. 启动
@@ -86,9 +97,11 @@ python main.py
 |---|---|
 | 地址 | `http://127.0.0.1:8004` |
 | API Key | 随便填（本地无鉴权） |
-| 模型 | `auto`（跨服务商）/ `aliyun/auto`（阿里云内切模型）/ `aliyun/qwen-audio-3.1-asr-flash-streaming`（指定） |
+| 模型 | `auto` / `aliyun/auto` / `groq/auto` / `groq/whisper-large-v3` |
 
 地址带不带 `/v1` 均可。
+
+> 注意：服务商名是 **groq**（不是 grok）。旧配置键 `grok` 会自动按 groq 加载。
 
 ---
 
@@ -99,7 +112,7 @@ python main.py
 - `POST /chat/completions`（`/v1/...`）：闪电说主路径，JSON base64 音频 → `choices[0].message.content`
 - `POST /audio/transcriptions`（`/v1/...`）：标准 multipart 兼容，返回 verbose_json
 
-识别前用本机 `ffmpeg` 统一转成 **16kHz 单声道 PCM WAV**。
+阿里云路径识别前用本机 `ffmpeg` 转成 **16kHz 单声道 PCM WAV**；Groq 直接上传原始音频到上游 `/audio/transcriptions`。
 
 ---
 
@@ -137,3 +150,5 @@ print(requests.post('http://127.0.0.1:8004/chat/completions',json=body,timeout=9
 2. 必须把文本放进 `choices[0].message.content`，否则报「未返回有效文本」。
 3. DashScope 的 `format`/`sample_rate` 须与音频一致，统一转 16k mono wav。
 4. `Recognition.call().get_sentence()` 可能返回 list，需遍历拼文本。
+5. Groq 在国内通常要配 `proxy`（与 `groq_proxy` 的 `GROQ_PROXY` 相同）。
+6. 识别失败会返回 502，不再返回 200 + 空 `content`。

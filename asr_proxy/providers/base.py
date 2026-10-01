@@ -82,6 +82,7 @@ class AsrProvider(ABC):
         audio_bytes: bytes,
         filename: str = "audio.wav",
         model: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> AsrResult:
         """识别音频字节，成功返回 AsrResult，失败抛出异常。"""
         raise NotImplementedError

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
-from asr_proxy.config import AppConfig
+from asr_proxy.config import AppConfig, canonical_provider_name
 from asr_proxy.providers.aliyun import AliyunProvider
 from asr_proxy.providers.base import AsrProvider, AsrResult
-from asr_proxy.providers.grok import GrokProvider
+from asr_proxy.providers.groq import GroqProvider
 
 _FACTORY = {
     "aliyun": AliyunProvider,
-    "grok": GrokProvider,
+    "groq": GroqProvider,
 }
 
 
@@ -52,13 +52,31 @@ def _rotate_from(items: List[str], start: Optional[str]) -> List[str]:
 class ProviderRouter:
     """按 model 选择服务商/模型；支持 auto 与 服务商/auto 容错切换。"""
 
-    def __init__(self, cfg: AppConfig, providers: Optional[Dict[str, AsrProvider]] = None):
+    def __init__(
+        self,
+        cfg: AppConfig,
+        providers: Optional[Dict[str, AsrProvider]] = None,
+        log_fn: Optional[Callable[[str], None]] = None,
+    ):
         self.cfg = cfg
         self.providers = providers or build_providers(cfg)
+        self._log_fn = log_fn
         # 上次成功的服务商；下次 auto 默认从此开始
         self._last_provider: Optional[str] = None
         # 各服务商上次成功的模型；下次 auto / 服务商/auto 默认从此开始
         self._last_model_by_provider: Dict[str, str] = {}
+
+    def set_log_fn(self, log_fn: Optional[Callable[[str], None]]) -> None:
+        """设置公共日志回调（所有服务商识别结果共用）。"""
+        self._log_fn = log_fn
+
+    def _log(self, msg: str) -> None:
+        if self._log_fn is None:
+            return
+        try:
+            self._log_fn(msg)
+        except Exception:
+            pass
 
     def enabled_list(self) -> List[AsrProvider]:
         """按 auto_order 返回已启用服务商。"""
@@ -92,6 +110,20 @@ class ProviderRouter:
         start = self._last_model_by_provider.get(provider.name)
         return _rotate_from(names, start)
 
+    def _find_provider(self, provider_name: str) -> Optional[AsrProvider]:
+        """按名称查找已启用服务商（兼容 grok→groq）。"""
+        canon = canonical_provider_name(provider_name)
+        p = self.providers.get(canon) or self.providers.get(provider_name)
+        if p and p.enabled:
+            return p
+        return next(
+            (
+                x for x in self.providers.values()
+                if x.enabled and x.name.lower() == canon.lower()
+            ),
+            None,
+        )
+
     def resolve(self, model: str) -> List[RouteCandidate]:
         """解析请求 model，返回按优先级排列的候选列表。"""
         raw = (model or "").strip()
@@ -103,14 +135,7 @@ class ProviderRouter:
             provider_name, _, rest = raw.partition("/")
             provider_name = provider_name.strip()
             rest = rest.strip()
-            p = self.providers.get(provider_name)
-            if not p or not p.enabled:
-                # 大小写不敏感查找
-                p = next(
-                    (x for x in self.providers.values()
-                     if x.enabled and x.name.lower() == provider_name.lower()),
-                    None,
-                )
+            p = self._find_provider(provider_name)
             if not p or not p.enabled:
                 return []
             if not rest or rest.lower() == "auto":
@@ -127,7 +152,7 @@ class ProviderRouter:
 
         # 兼容：仅服务商名 → 该服务商默认/上次成功模型（不切模型）
         for p in self.enabled_list():
-            if p.name.lower() == m:
+            if p.name.lower() == canonical_provider_name(m):
                 return [RouteCandidate(provider=p, model=self._preferred_model(p))]
 
         # 兼容：裸模型名 → 匹配拥有该模型的已启用服务商
@@ -156,27 +181,45 @@ class ProviderRouter:
         audio_bytes: bytes,
         model: str = "auto",
         filename: str = "audio.wav",
+        language: Optional[str] = None,
     ) -> Tuple[AsrResult, List[str]]:
         """识别音频。返回 (结果, 失败记录列表)。全部失败则抛出最后一个异常。"""
         candidates = self.resolve(model)
         if not candidates:
-            raise RuntimeError(
+            msg = (
                 f"没有可用的 ASR 服务商（model={model!r}）。"
-                "请在 config.yaml 或环境变量中配置至少一个 api_key。"
+                "请在 config.yaml 或环境变量中配置至少一个 api_key；"
+                "闪电说模型请填 groq/... 或 aliyun/... 或 auto。"
             )
+            self._log(f"[recognize] 识别失败 请求模型={model!r} 跳过=['无可用候选']")
+            raise RuntimeError(msg)
+
+        self._log(
+            f"[recognize] 请求模型={model!r} "
+            f"候选={[c.label for c in candidates]}"
+        )
 
         errors: List[str] = []
         last_exc: Optional[BaseException] = None
         for c in candidates:
             try:
                 result = c.provider.recognize(
-                    audio_bytes, filename=filename, model=c.model,
+                    audio_bytes,
+                    filename=filename,
+                    model=c.model,
+                    language=language,
                 )
                 if result and result.text:
                     used_model = result.model or c.model
                     result.provider = result.provider or c.provider.name
                     result.model = used_model
+                    used = f"{result.provider}/{used_model}"
                     self.remember_success(c.provider.name, used_model)
+                    self._log(
+                        f"[recognize] 使用模型={used} "
+                        f"请求模型={model!r} "
+                        f"跳过={errors or '无'}"
+                    )
                     return result, errors
                 errors.append(f"{c.label}: 返回空文本")
             except Exception as e:
@@ -184,6 +227,11 @@ class ProviderRouter:
                 errors.append(f"{c.label}: {type(e).__name__}: {e}")
                 continue
 
+        self._log(
+            f"[recognize] 识别失败 "
+            f"请求模型={model!r} "
+            f"跳过={errors or '无'}"
+        )
         detail = "; ".join(errors) if errors else "unknown"
         if last_exc is not None:
             raise RuntimeError(f"全部服务商识别失败: {detail}") from last_exc
