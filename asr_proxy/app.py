@@ -39,6 +39,31 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         except Exception:
             pass
 
+    def _log_recognize_result(
+        tag: str,
+        requested: str,
+        result=None,
+        errors: Optional[List[str]] = None,
+    ) -> None:
+        """记录本次实际使用的模型，以及失败跳过的模型。"""
+        skipped = errors or []
+        if result is not None:
+            used = (
+                f"{result.provider}/{result.model}"
+                if result.model else (result.provider or "?")
+            )
+            _log(
+                f"[{tag}] 使用模型={used} "
+                f"请求模型={requested!r} "
+                f"跳过={skipped or '无'}"
+            )
+        else:
+            _log(
+                f"[{tag}] 识别失败 "
+                f"请求模型={requested!r} "
+                f"跳过={skipped or '无'}"
+            )
+
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         try:
@@ -109,17 +134,13 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         audio_bytes = await file.read()
         if not audio_bytes:
             return {"error": {"message": "empty audio", "status_code": 400}}
-        _log(f"[transcribe] file={file.filename} bytes={len(audio_bytes)} model={model}")
+        _log(f"[transcribe] file={file.filename} bytes={len(audio_bytes)} 请求模型={model!r}")
         try:
             result, errors = router.recognize(
                 audio_bytes, model=model, filename=file.filename or "audio.wav",
             )
-            if errors:
-                _log(f"[transcribe] failover errors={errors}")
-            _log(
-                f"[transcribe] OK provider={result.provider} "
-                f"model={result.model} text={result.text!r}"
-            )
+            _log_recognize_result("transcribe", model, result=result, errors=errors)
+            _log(f"[transcribe] OK text={result.text!r}")
             return {
                 "task": "transcribe",
                 "language": result.language,
@@ -130,6 +151,8 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 "model": f"{result.provider}/{result.model}" if result.model else result.provider,
             }
         except Exception as e:
+            # router 全部失败时错误信息里已含各模型失败原因
+            _log_recognize_result("transcribe", model, result=None, errors=[str(e)])
             _log(f"[transcribe] EXCEPTION {type(e).__name__}: {e}")
             return {"error": {"message": f"{type(e).__name__}: {e}", "status_code": 500}}
 
@@ -159,24 +182,26 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 audio_bytes = _try_decode_b64(b64str)
                 if len(audio_bytes) < 100:
                     continue
-                _log(f"[chat] candidate[{i}] decoded bytes={len(audio_bytes)} model={model}")
+                _log(f"[chat] candidate[{i}] decoded bytes={len(audio_bytes)} 请求模型={model!r}")
                 result, errors = router.recognize(
                     audio_bytes, model=model, filename="audio.wav",
                 )
-                if errors:
-                    _log(f"[chat] failover errors={errors}")
+                _log_recognize_result("chat", model, result=result, errors=errors)
                 if result.text:
                     used = (
                         f"{result.provider}/{result.model}"
                         if result.model else result.provider
                     )
-                    _log(f"[chat] OK provider={result.provider} model={result.model} text={result.text!r}")
+                    _log(f"[chat] OK text={result.text!r}")
                     return {
                         "choices": [{"message": {"content": result.text}}],
                         "model": used,
                         "provider": result.provider,
                     }
             except Exception as e:
+                _log_recognize_result(
+                    "chat", model, result=None, errors=[f"{type(e).__name__}: {e}"],
+                )
                 _log(f"[chat] candidate[{i}] error: {type(e).__name__}: {e}")
                 continue
 
