@@ -34,6 +34,11 @@ from asr_proxy.providers.doubao import (
     _build_audio_only_request,
     _build_full_client_request,
 )
+from asr_proxy.providers.siliconflow import (
+    SiliconFlowProvider,
+    clean_sensevoice_text,
+    resolve_model_name,
+)
 from asr_proxy.providers.groq import GroqProvider
 
 WAV_PATH = ROOT / "test_asr_16k.wav"
@@ -147,6 +152,9 @@ class TestConfig:
         assert "asr-2.0" in cfg.providers["doubao"].models
         assert "asr-1.0" in cfg.providers["doubao"].models
         assert "openspeech.bytedance.com" in cfg.providers["doubao"].base_url
+        assert "siliconflow" in cfg.providers
+        assert any("SenseVoice" in m for m in cfg.providers["siliconflow"].models)
+        assert "siliconflow.cn" in cfg.providers["siliconflow"].base_url
 
     def test_api_key_enables_provider(self, cfg_aliyun_only):
         enabled = cfg_aliyun_only.enabled_providers()
@@ -738,3 +746,81 @@ class TestDoubaoLive:
         assert result.text
         assert result.provider == "doubao"
         print(f"豆包识别结果: {result.text!r} model={result.model} errors={errors}")
+
+
+class TestSiliconFlow:
+    def test_resolve_model_alias(self):
+        assert resolve_model_name("SenseVoiceSmall") == "FunAudioLLM/SenseVoiceSmall"
+        assert resolve_model_name("sensevoice") == "FunAudioLLM/SenseVoiceSmall"
+        assert (
+            resolve_model_name("FunAudioLLM/SenseVoiceSmall")
+            == "FunAudioLLM/SenseVoiceSmall"
+        )
+
+    def test_clean_sensevoice_tags(self):
+        raw = "<|zh|><|NEUTRAL|><|Speech|>你好世界"
+        assert clean_sensevoice_text(raw) == "你好世界"
+
+    def test_recognize_posts_multipart(self, wav_bytes):
+        captured = {}
+
+        class FakeResp:
+            status_code = 200
+            text = ""
+
+            def json(self):
+                return {
+                    "text": "<|zh|><|NEUTRAL|>硅基流动识别成功",
+                }
+
+        class FakeClient:
+            def post(self, url, headers=None, data=None, files=None):
+                captured["url"] = url
+                captured["headers"] = headers
+                captured["data"] = data
+                captured["files"] = files
+                return FakeResp()
+
+            def close(self):
+                pass
+
+        p = SiliconFlowProvider(
+            ProviderConfig(
+                name="siliconflow",
+                api_key="sk-sf-test",
+                base_url="https://api.siliconflow.cn/v1",
+                models=["FunAudioLLM/SenseVoiceSmall"],
+            ),
+            client=FakeClient(),
+        )
+        result = p.recognize(
+            wav_bytes, filename="voice.wav", model="SenseVoiceSmall",
+        )
+
+        assert result.text == "硅基流动识别成功"
+        assert result.provider == "siliconflow"
+        assert captured["url"] == "https://api.siliconflow.cn/v1/audio/transcriptions"
+        assert captured["headers"]["Authorization"] == "Bearer sk-sf-test"
+        assert captured["data"]["model"] == "FunAudioLLM/SenseVoiceSmall"
+        filename, content, content_type = captured["files"]["file"]
+        assert filename == "voice.wav"
+        assert content == wav_bytes
+        assert content_type == "audio/wav"
+
+
+@pytest.mark.integration
+class TestSiliconFlowLive:
+    """需要真实 SILICONFLOW_API_KEY 才会跑；无 Key 时自动跳过。"""
+
+    def test_recognize_wav(self, wav_bytes):
+        cfg = load_config()
+        sf = cfg.providers.get("siliconflow")
+        if not sf or not sf.enabled:
+            pytest.skip("未配置硅基流动 api_key，跳过真实识别")
+        router = ProviderRouter(cfg)
+        result, errors = router.recognize(
+            wav_bytes, model="siliconflow/auto", filename="test_asr_16k.wav",
+        )
+        assert result.text
+        assert result.provider == "siliconflow"
+        print(f"硅基流动识别结果: {result.text!r} model={result.model} errors={errors}")

@@ -10,11 +10,13 @@ from asr_proxy.providers.aliyun import AliyunProvider
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.providers.doubao import DoubaoProvider
 from asr_proxy.providers.groq import GroqProvider
+from asr_proxy.providers.siliconflow import SiliconFlowProvider
 
 _FACTORY = {
     "aliyun": AliyunProvider,
     "groq": GroqProvider,
     "doubao": DoubaoProvider,
+    "siliconflow": SiliconFlowProvider,
 }
 
 
@@ -191,7 +193,7 @@ class ProviderRouter:
             msg = (
                 f"没有可用的 ASR 服务商（model={model!r}）。"
                 "请在 config.yaml 或环境变量中配置至少一个 api_key；"
-                "闪电说模型请填 groq/... / aliyun/... / doubao/... 或 auto。"
+                "闪电说模型请填 groq/... / aliyun/... / doubao/... / siliconflow/... 或 auto。"
             )
             self._log(f"[recognize] 识别失败 请求模型={model!r} 跳过=['无可用候选']")
             raise RuntimeError(msg)

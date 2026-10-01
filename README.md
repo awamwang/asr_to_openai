@@ -14,6 +14,7 @@
 | 阿里云百炼 DashScope | ✅ 已实现 | `api_key` 非空 |
 | Groq Whisper | ✅ 已实现 | `api_key` 非空；国内通常还需 `proxy` |
 | 豆包语音（火山）1.0 / 2.0 | ✅ 已实现 | `api_key` 非空；旧版控制台还需 `app_id` |
+| 硅基流动 SenseVoice | ✅ 已实现 | `api_key` 非空（国内直连） |
 
 失败时接口返回 **真实 HTTP 错误码**（如 400/502），不再用 200 + 空文本糊弄客户端。
 
@@ -85,6 +86,11 @@ providers:
     models:
       - asr-2.0   # 豆包流式语音识别 2.0 → volc.seedasr.sauc.duration
       - asr-1.0   # 豆包流式语音识别 1.0 → volc.bigasr.sauc.duration
+  siliconflow:
+    api_key: "sk-你的硅基流动Key"
+    base_url: "https://api.siliconflow.cn/v1"
+    models:
+      - SenseVoiceSmall
 ```
 
 也可用环境变量（优先于 YAML）：
@@ -94,6 +100,7 @@ providers:
 | 阿里云 | `DASHSCOPE_API_KEY` / `ALIYUN_API_KEY`，`DASHSCOPE_WORKSPACE_ID`，`DASHSCOPE_ASR_MODELS`（逗号分隔）或 `DASHSCOPE_ASR_MODEL` |
 | Groq | `GROQ_API_KEY`，`GROQ_BASE_URL`，`GROQ_PROXY`，`GROQ_TIMEOUT`，`GROQ_ASR_MODELS` / `GROQ_DEFAULT_MODEL` |
 | 豆包 | `DOUBAO_API_KEY` / `VOLC_API_KEY`，`DOUBAO_APP_ID` / `VOLC_APP_ID`，`DOUBAO_WS_URL`，`DOUBAO_ASR_MODELS` |
+| 硅基流动 | `SILICONFLOW_API_KEY` / `SF_API_KEY`，`SILICONFLOW_BASE_URL`，`SILICONFLOW_ASR_MODELS` |
 | 通用 | `ASR_PORT`，`ASR_LOG`，`FFMPEG_PATH` |
 
 ### 3. 启动
@@ -108,7 +115,7 @@ python main.py
 |---|---|
 | 地址 | `http://127.0.0.1:8004` |
 | API Key | 随便填（本地无鉴权） |
-| 模型 | `auto` / `aliyun/auto` / `groq/auto` / `doubao/auto` / `doubao/asr-2.0` |
+| 模型 | `auto` / `aliyun/auto` / `doubao/asr-2.0` / `siliconflow/SenseVoiceSmall` |
 
 地址带不带 `/v1` 均可。
 

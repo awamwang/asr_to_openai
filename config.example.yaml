@@ -14,8 +14,9 @@ ffmpeg_path: "ffmpeg"
 # auto：只在服务商之间切换；出错则试下一个。成功后下次优先从该服务商开始。
 auto_order:
   - aliyun
-  - groq
   - doubao
+  - siliconflow
+  - groq
 
 providers:
   aliyun:
@@ -68,3 +69,20 @@ providers:
     models:
       - asr-2.0
       - asr-1.0
+
+  siliconflow:
+    # 硅基流动 SenseVoice（中文优化，常有免费额度）
+    # 文档：https://siliconflow.readme.io/reference/createaudiotranscriptions
+    # 控制台：https://cloud.siliconflow.cn/account/ak
+    # 环境变量：SILICONFLOW_API_KEY / SF_API_KEY
+    api_key: ""
+    # 环境变量：SILICONFLOW_BASE_URL
+    base_url: "https://api.siliconflow.cn/v1"
+    # 国内一般直连；如需代理：SILICONFLOW_PROXY
+    proxy: ""
+    # 环境变量：SILICONFLOW_TIMEOUT（秒）
+    timeout: 120
+    # 对外 ID：siliconflow/SenseVoiceSmall（短名会映射到 FunAudioLLM/SenseVoiceSmall）
+    # 环境变量：SILICONFLOW_ASR_MODELS
+    models:
+      - SenseVoiceSmall

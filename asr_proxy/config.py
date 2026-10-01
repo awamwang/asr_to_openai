@@ -100,7 +100,9 @@ class AppConfig:
     port: int = 8004
     log_file: str = "asr_proxy.log"
     ffmpeg_path: str = "ffmpeg"
-    auto_order: List[str] = field(default_factory=lambda: ["aliyun", "groq", "doubao"])
+    auto_order: List[str] = field(
+        default_factory=lambda: ["aliyun", "doubao", "siliconflow", "groq"],
+    )
     providers: Dict[str, ProviderConfig] = field(default_factory=dict)
 
     def enabled_providers(self) -> List[ProviderConfig]:
@@ -245,6 +247,38 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             ),
             models=models,
         )
+    if name in ("siliconflow", "silicon", "sf"):
+        env_models = _first_env(
+            "SILICONFLOW_ASR_MODELS", "SF_ASR_MODELS",
+        )
+        env_model = _first_env(
+            "SILICONFLOW_ASR_MODEL", "SF_ASR_MODEL",
+        )
+        models = _normalize_models(
+            models=env_models or None,
+            model=env_model or None,
+        ) or yaml_models or ["SenseVoiceSmall"]
+        return ProviderConfig(
+            name="siliconflow",
+            api_key=_first_env(
+                "SILICONFLOW_API_KEY", "SF_API_KEY",
+                default=str(raw.get("api_key") or "").strip(),
+            ),
+            base_url=_first_env(
+                "SILICONFLOW_BASE_URL", "SF_BASE_URL",
+                default=str(
+                    raw.get("base_url") or "https://api.siliconflow.cn/v1"
+                ).strip(),
+            ),
+            proxy=normalize_proxy(_first_env(
+                "SILICONFLOW_PROXY", "SF_PROXY",
+                default=str(raw.get("proxy") or "").strip(),
+            )),
+            timeout=_float_env(
+                "SILICONFLOW_TIMEOUT", "SF_TIMEOUT", default=default_timeout,
+            ),
+            models=models,
+        )
     return ProviderConfig(
         name=name,
         api_key=str(raw.get("api_key") or "").strip(),
@@ -258,12 +292,14 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
 
 
 def canonical_provider_name(name: str) -> str:
-    """历史别名归一：grok → groq；volcengine/volc → doubao。"""
+    """历史别名归一：grok → groq；volcengine/volc → doubao；silicon/sf → siliconflow。"""
     n = (name or "").strip().lower()
     if n == "grok":
         return "groq"
     if n in ("volcengine", "volc", "bytedance"):
         return "doubao"
+    if n in ("silicon", "sf"):
+        return "siliconflow"
     return n
 
 
@@ -281,7 +317,7 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
     server = data.get("server") or {}
     providers_raw = data.get("providers") or {}
 
-    # 兼容旧配置键 grok → groq；volcengine/volc → doubao
+    # 兼容旧配置键 grok → groq；volcengine/volc → doubao；silicon/sf → siliconflow
     if "groq" not in providers_raw and "grok" in providers_raw:
         providers_raw = dict(providers_raw)
         providers_raw["groq"] = providers_raw.pop("grok")
@@ -291,18 +327,26 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
                 providers_raw = dict(providers_raw)
                 providers_raw["doubao"] = providers_raw.pop(alias)
                 break
+    if "siliconflow" not in providers_raw:
+        for alias in ("silicon", "sf"):
+            if alias in providers_raw:
+                providers_raw = dict(providers_raw)
+                providers_raw["siliconflow"] = providers_raw.pop(alias)
+                break
 
     providers: Dict[str, ProviderConfig] = {}
-    for name in ("aliyun", "groq", "doubao"):
+    for name in ("aliyun", "groq", "doubao", "siliconflow"):
         providers[name] = _merge_provider(name, providers_raw.get(name) or {})
     for name, raw in providers_raw.items():
         canon = canonical_provider_name(name)
         if canon not in providers:
             providers[canon] = _merge_provider(canon, raw or {})
 
-    auto_order_raw = data.get("auto_order") or ["aliyun", "groq", "doubao"]
+    auto_order_raw = data.get("auto_order") or [
+        "aliyun", "doubao", "siliconflow", "groq",
+    ]
     if not isinstance(auto_order_raw, list):
-        auto_order_raw = ["aliyun", "groq", "doubao"]
+        auto_order_raw = ["aliyun", "doubao", "siliconflow", "groq"]
     auto_order = [canonical_provider_name(str(x)) for x in auto_order_raw]
     # 去重保序
     seen = set()
