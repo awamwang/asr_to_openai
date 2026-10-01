@@ -65,6 +65,8 @@ class ProviderConfig:
     name: str
     api_key: str = ""
     workspace_id: str = ""
+    # 豆包旧版控制台 APP ID（X-Api-App-Key）；新版只需 api_key
+    app_id: str = ""
     base_url: str = ""
     proxy: str = ""
     timeout: float = 300.0
@@ -98,7 +100,7 @@ class AppConfig:
     port: int = 8004
     log_file: str = "asr_proxy.log"
     ffmpeg_path: str = "ffmpeg"
-    auto_order: List[str] = field(default_factory=lambda: ["aliyun", "groq"])
+    auto_order: List[str] = field(default_factory=lambda: ["aliyun", "groq", "doubao"])
     providers: Dict[str, ProviderConfig] = field(default_factory=dict)
 
     def enabled_providers(self) -> List[ProviderConfig]:
@@ -205,10 +207,49 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             timeout=_float_env("GROQ_TIMEOUT", "GROK_TIMEOUT", default=default_timeout),
             models=models,
         )
+    if name in ("doubao", "volcengine", "volc"):
+        env_models = _first_env(
+            "DOUBAO_ASR_MODELS", "VOLC_ASR_MODELS", "VOLCENGINE_ASR_MODELS",
+        )
+        env_model = _first_env(
+            "DOUBAO_ASR_MODEL", "VOLC_ASR_MODEL", "VOLCENGINE_ASR_MODEL",
+        )
+        models = _normalize_models(
+            models=env_models or None,
+            model=env_model or None,
+        ) or yaml_models or ["asr-2.0", "asr-1.0"]
+        return ProviderConfig(
+            name="doubao",
+            api_key=_first_env(
+                "DOUBAO_API_KEY", "VOLC_API_KEY", "VOLC_ACCESS_KEY",
+                "VOLCENGINE_API_KEY", "DOUBAO_ACCESS_KEY",
+                default=str(raw.get("api_key") or "").strip(),
+            ),
+            app_id=_first_env(
+                "DOUBAO_APP_ID", "VOLC_APP_ID", "VOLC_APP_KEY",
+                "VOLCENGINE_APP_ID",
+                default=str(
+                    raw.get("app_id") or raw.get("app_key") or ""
+                ).strip(),
+            ),
+            workspace_id=str(raw.get("workspace_id") or "").strip(),
+            base_url=_first_env(
+                "DOUBAO_WS_URL", "VOLC_WS_URL", "DOUBAO_BASE_URL",
+                default=str(
+                    raw.get("base_url")
+                    or "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
+                ).strip(),
+            ),
+            timeout=_float_env(
+                "DOUBAO_TIMEOUT", "VOLC_TIMEOUT", default=default_timeout,
+            ),
+            models=models,
+        )
     return ProviderConfig(
         name=name,
         api_key=str(raw.get("api_key") or "").strip(),
         workspace_id=str(raw.get("workspace_id") or "").strip(),
+        app_id=str(raw.get("app_id") or raw.get("app_key") or "").strip(),
         base_url=str(raw.get("base_url") or "").strip(),
         proxy=normalize_proxy(str(raw.get("proxy") or "").strip()),
         timeout=default_timeout,
@@ -217,10 +258,12 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
 
 
 def canonical_provider_name(name: str) -> str:
-    """历史别名归一：grok → groq。"""
+    """历史别名归一：grok → groq；volcengine/volc → doubao。"""
     n = (name or "").strip().lower()
     if n == "grok":
         return "groq"
+    if n in ("volcengine", "volc", "bytedance"):
+        return "doubao"
     return n
 
 
@@ -238,22 +281,28 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
     server = data.get("server") or {}
     providers_raw = data.get("providers") or {}
 
-    # 兼容旧配置键 grok → groq
+    # 兼容旧配置键 grok → groq；volcengine/volc → doubao
     if "groq" not in providers_raw and "grok" in providers_raw:
         providers_raw = dict(providers_raw)
         providers_raw["groq"] = providers_raw.pop("grok")
+    if "doubao" not in providers_raw:
+        for alias in ("volcengine", "volc", "bytedance"):
+            if alias in providers_raw:
+                providers_raw = dict(providers_raw)
+                providers_raw["doubao"] = providers_raw.pop(alias)
+                break
 
     providers: Dict[str, ProviderConfig] = {}
-    for name in ("aliyun", "groq"):
+    for name in ("aliyun", "groq", "doubao"):
         providers[name] = _merge_provider(name, providers_raw.get(name) or {})
     for name, raw in providers_raw.items():
         canon = canonical_provider_name(name)
         if canon not in providers:
             providers[canon] = _merge_provider(canon, raw or {})
 
-    auto_order_raw = data.get("auto_order") or ["aliyun", "groq"]
+    auto_order_raw = data.get("auto_order") or ["aliyun", "groq", "doubao"]
     if not isinstance(auto_order_raw, list):
-        auto_order_raw = ["aliyun", "groq"]
+        auto_order_raw = ["aliyun", "groq", "doubao"]
     auto_order = [canonical_provider_name(str(x)) for x in auto_order_raw]
     # 去重保序
     seen = set()

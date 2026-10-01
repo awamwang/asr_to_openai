@@ -13,6 +13,7 @@
 |---|---|---|
 | 阿里云百炼 DashScope | ✅ 已实现 | `api_key` 非空 |
 | Groq Whisper | ✅ 已实现 | `api_key` 非空；国内通常还需 `proxy` |
+| 豆包语音（火山）1.0 / 2.0 | ✅ 已实现 | `api_key` 非空；旧版控制台还需 `app_id` |
 
 失败时接口返回 **真实 HTTP 错误码**（如 400/502），不再用 200 + 空文本糊弄客户端。
 
@@ -75,6 +76,15 @@ providers:
     models:
       - whisper-large-v3
       - whisper-large-v3-turbo
+  doubao:
+    # 新版控制台：只填 api_key；旧版再填 app_id
+    api_key: "你的X-Api-Key或AccessToken"
+    app_id: ""
+    # 默认 bigmodel_nostream（准确率优先）
+    base_url: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
+    models:
+      - asr-2.0   # 豆包流式语音识别 2.0 → volc.seedasr.sauc.duration
+      - asr-1.0   # 豆包流式语音识别 1.0 → volc.bigasr.sauc.duration
 ```
 
 也可用环境变量（优先于 YAML）：
@@ -83,6 +93,7 @@ providers:
 |---|---|
 | 阿里云 | `DASHSCOPE_API_KEY` / `ALIYUN_API_KEY`，`DASHSCOPE_WORKSPACE_ID`，`DASHSCOPE_ASR_MODELS`（逗号分隔）或 `DASHSCOPE_ASR_MODEL` |
 | Groq | `GROQ_API_KEY`，`GROQ_BASE_URL`，`GROQ_PROXY`，`GROQ_TIMEOUT`，`GROQ_ASR_MODELS` / `GROQ_DEFAULT_MODEL` |
+| 豆包 | `DOUBAO_API_KEY` / `VOLC_API_KEY`，`DOUBAO_APP_ID` / `VOLC_APP_ID`，`DOUBAO_WS_URL`，`DOUBAO_ASR_MODELS` |
 | 通用 | `ASR_PORT`，`ASR_LOG`，`FFMPEG_PATH` |
 
 ### 3. 启动
@@ -97,11 +108,23 @@ python main.py
 |---|---|
 | 地址 | `http://127.0.0.1:8004` |
 | API Key | 随便填（本地无鉴权） |
-| 模型 | `auto` / `aliyun/auto` / `groq/auto` / `groq/whisper-large-v3` |
+| 模型 | `auto` / `aliyun/auto` / `groq/auto` / `doubao/auto` / `doubao/asr-2.0` |
 
 地址带不带 `/v1` 均可。
 
 > 注意：服务商名是 **groq**（不是 grok）。旧配置键 `grok` 会自动按 groq 加载。
+> 豆包也可写 `volcengine` / `volc`，会归一为 `doubao`。
+
+阿里云 / 豆包路径识别前用本机 `ffmpeg` 转成 **16kHz 单声道 PCM**；Groq 直接上传原始音频到上游 `/audio/transcriptions`。
+
+豆包模型与资源 ID 对应（[官方文档](https://docs.volcengine.com/docs/6561/1354869)）：
+
+| 对外模型 | Resource ID |
+|---|---|
+| `asr-1.0` | `volc.bigasr.sauc.duration` |
+| `asr-2.0` | `volc.seedasr.sauc.duration` |
+| `asr-1.0-concurrent` | `volc.bigasr.sauc.concurrent` |
+| `asr-2.0-concurrent` | `volc.seedasr.sauc.concurrent` |
 
 ---
 
@@ -111,8 +134,6 @@ python main.py
 - `GET /v1/models`：列出 `auto`、`服务商/auto` 及全部 `服务商/模型`
 - `POST /chat/completions`（`/v1/...`）：闪电说主路径，JSON base64 音频 → `choices[0].message.content`
 - `POST /audio/transcriptions`（`/v1/...`）：标准 multipart 兼容，返回 verbose_json
-
-阿里云路径识别前用本机 `ffmpeg` 转成 **16kHz 单声道 PCM WAV**；Groq 直接上传原始音频到上游 `/audio/transcriptions`。
 
 ---
 
@@ -151,4 +172,5 @@ print(requests.post('http://127.0.0.1:8004/chat/completions',json=body,timeout=9
 3. DashScope 的 `format`/`sample_rate` 须与音频一致，统一转 16k mono wav。
 4. `Recognition.call().get_sentence()` 可能返回 list，需遍历拼文本。
 5. Groq 在国内通常要配 `proxy`（与 `groq_proxy` 的 `GROQ_PROXY` 相同）。
-6. 识别失败会返回 502，不再返回 200 + 空 `content`。
+6. 豆包新版控制台只填 `api_key`；旧版需 `app_id` + Access Token。并发版资源包请用 `asr-*-concurrent`。
+7. 识别失败会返回 502，不再返回 200 + 空 `content`。

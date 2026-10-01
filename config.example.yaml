@@ -15,6 +15,7 @@ ffmpeg_path: "ffmpeg"
 auto_order:
   - aliyun
   - groq
+  - doubao
 
 providers:
   aliyun:
@@ -45,3 +46,25 @@ providers:
     models:
       - whisper-large-v3
       - whisper-large-v3-turbo
+
+  doubao:
+    # 豆包流式语音识别 1.0 / 2.0（火山 openspeech WebSocket）
+    # 文档：https://docs.volcengine.com/docs/6561/1354869
+    # 新版控制台：只填 api_key（X-Api-Key）
+    # 旧版控制台：填 app_id + api_key（Access Token）
+    # 环境变量：DOUBAO_API_KEY / VOLC_API_KEY / VOLC_ACCESS_KEY
+    api_key: ""
+    # 环境变量：DOUBAO_APP_ID / VOLC_APP_ID / VOLC_APP_KEY
+    app_id: ""
+    # 默认流式输入模式（准确率更高）。环境变量：DOUBAO_WS_URL
+    base_url: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
+    # 环境变量：DOUBAO_TIMEOUT（秒）
+    timeout: 90
+    # 对外 ID：doubao/asr-2.0、doubao/asr-1.0；doubao/auto 在列表内切换
+    # asr-1.0 → volc.bigasr.sauc.duration
+    # asr-2.0 → volc.seedasr.sauc.duration
+    # 也可直接填资源 ID，如 volc.seedasr.sauc.concurrent
+    # 环境变量：DOUBAO_ASR_MODELS（逗号分隔）
+    models:
+      - asr-2.0
+      - asr-1.0

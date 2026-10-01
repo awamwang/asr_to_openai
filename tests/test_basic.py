@@ -26,6 +26,14 @@ from asr_proxy.providers.aliyun import (
     resolve_asr_mode,
     _extract_flash_text,
 )
+from asr_proxy.providers.doubao import (
+    DoubaoProvider,
+    extract_result,
+    parse_server_frame,
+    resolve_resource_id,
+    _build_audio_only_request,
+    _build_full_client_request,
+)
 from asr_proxy.providers.groq import GroqProvider
 
 WAV_PATH = ROOT / "test_asr_16k.wav"
@@ -128,12 +136,17 @@ class TestConfig:
         cfg = load_config(ROOT / "config.example.yaml")
         assert "aliyun" in cfg.providers
         assert "groq" in cfg.providers
+        assert "doubao" in cfg.providers
         assert "aliyun" in cfg.auto_order
+        assert "doubao" in cfg.auto_order
         assert cfg.providers["aliyun"].models
         assert cfg.providers["aliyun"].model == cfg.providers["aliyun"].models[0]
         assert "qwen-audio-3.0-asr-flash" in cfg.providers["aliyun"].models
         assert "whisper-large-v3" in cfg.providers["groq"].models
         assert "groq.com" in cfg.providers["groq"].base_url
+        assert "asr-2.0" in cfg.providers["doubao"].models
+        assert "asr-1.0" in cfg.providers["doubao"].models
+        assert "openspeech.bytedance.com" in cfg.providers["doubao"].base_url
 
     def test_api_key_enables_provider(self, cfg_aliyun_only):
         enabled = cfg_aliyun_only.enabled_providers()
@@ -557,3 +570,171 @@ class TestAliyunLive:
         assert result.text
         assert result.provider == "aliyun"
         print(f"识别结果: {result.text!r} model={result.model} errors={errors}")
+
+
+class TestDoubao:
+    def test_resolve_resource_id(self):
+        assert resolve_resource_id("asr-1.0") == "volc.bigasr.sauc.duration"
+        assert resolve_resource_id("asr-2.0") == "volc.seedasr.sauc.duration"
+        assert resolve_resource_id("asr-2.0-concurrent") == "volc.seedasr.sauc.concurrent"
+        assert resolve_resource_id("bigasr") == "volc.bigasr.sauc.duration"
+        assert resolve_resource_id("seedasr") == "volc.seedasr.sauc.duration"
+        assert (
+            resolve_resource_id("volc.seedasr.sauc.duration")
+            == "volc.seedasr.sauc.duration"
+        )
+
+    def test_extract_result(self):
+        text, segments, duration = extract_result({
+            "result": {
+                "text": "这是字节跳动",
+                "utterances": [{
+                    "text": "这是字节跳动",
+                    "start_time": 0,
+                    "end_time": 1705,
+                    "definite": True,
+                }],
+            },
+            "audio_info": {"duration": 1705},
+        })
+        assert text == "这是字节跳动"
+        assert duration == 1.705
+        assert segments[0]["text"] == "这是字节跳动"
+
+    def test_build_and_parse_frames(self):
+        import gzip
+        import json
+        import struct
+
+        frame = _build_full_client_request(1, {"request": {"model_name": "bigmodel"}})
+        assert frame[1] >> 4 == 0b0001  # full client
+        seq = struct.unpack(">i", frame[4:8])[0]
+        assert seq == 1
+        size = struct.unpack(">I", frame[8:12])[0]
+        payload = gzip.decompress(frame[12:12 + size])
+        assert json.loads(payload)["request"]["model_name"] == "bigmodel"
+
+        audio = _build_audio_only_request(2, b"\x00\x01" * 10, is_last=True)
+        assert audio[1] >> 4 == 0b0010
+        assert (audio[1] & 0x0F) == 0b0011  # neg with sequence
+        assert struct.unpack(">i", audio[4:8])[0] == -2
+
+        # 构造一个假的 server full response
+        body = gzip.compress(json.dumps({
+            "result": {"text": "你好"},
+            "audio_info": {"duration": 500},
+        }).encode())
+        header = bytes([
+            (0b0001 << 4) | 0b0001,
+            (0b1001 << 4) | 0b0011,  # full server + last with seq
+            (0b0001 << 4) | 0b0001,  # json + gzip
+            0x00,
+        ])
+        server = header + struct.pack(">i", 3) + struct.pack(">I", len(body)) + body
+        parsed = parse_server_frame(server)
+        assert parsed["is_last"] is True
+        assert parsed["payload"]["result"]["text"] == "你好"
+
+    def test_auth_headers_new_console(self):
+        p = DoubaoProvider(ProviderConfig(
+            name="doubao",
+            api_key="test-api-key",
+            models=["asr-2.0"],
+        ))
+        headers = p._auth_headers("cid-1")
+        assert headers["X-Api-Key"] == "test-api-key"
+        assert "X-Api-App-Key" not in headers
+        assert headers["X-Api-Connect-Id"] == "cid-1"
+
+    def test_auth_headers_old_console(self):
+        p = DoubaoProvider(ProviderConfig(
+            name="doubao",
+            api_key="access-token",
+            app_id="123456789",
+            models=["asr-1.0"],
+        ))
+        headers = p._auth_headers("cid-2")
+        assert headers["X-Api-App-Key"] == "123456789"
+        assert headers["X-Api-Access-Key"] == "access-token"
+        assert "X-Api-Key" not in headers
+
+    def test_recognize_mocked_ws(self, wav_bytes):
+        """模拟 WebSocket 交互，断言协议帧与最终文本。"""
+        import gzip
+        import json
+        import struct
+        import types
+
+        sent = []
+
+        class FakeWs:
+            def send(self, data, opcode=None):
+                sent.append(data)
+
+            def recv(self):
+                # 直接返回最终包
+                body = gzip.compress(json.dumps({
+                    "result": {"text": "豆包识别成功"},
+                    "audio_info": {"duration": 1200},
+                }).encode())
+                header = bytes([
+                    (0b0001 << 4) | 0b0001,
+                    (0b1001 << 4) | 0b0011,
+                    (0b0001 << 4) | 0b0001,
+                    0x00,
+                ])
+                return header + struct.pack(">i", 1) + struct.pack(">I", len(body)) + body
+
+            def close(self):
+                pass
+
+        def fake_create_connection(url, header=None, timeout=None, enable_multithread=None):
+            assert "openspeech.bytedance.com" in url
+            assert any(h.startswith("X-Api-Key:") for h in (header or []))
+            assert any("volc.seedasr.sauc.duration" in h for h in (header or []))
+            return FakeWs()
+
+        fake_mod = types.ModuleType("websocket")
+        fake_mod.create_connection = fake_create_connection
+        fake_mod.ABNF = type("ABNF", (), {"OPCODE_BINARY": 0x2})()
+        fake_mod.WebSocketTimeoutException = type("T", (Exception,), {})
+        fake_mod.WebSocketConnectionClosedException = type("C", (Exception,), {})
+
+        p = DoubaoProvider(ProviderConfig(
+            name="doubao",
+            api_key="k-test",
+            models=["asr-2.0"],
+            timeout=30,
+        ))
+
+        with patch.dict("sys.modules", {"websocket": fake_mod}):
+            with patch("asr_proxy.providers.doubao.to_wav_16k_mono", return_value="fake.wav"):
+                with patch("asr_proxy.providers.doubao._wav_to_pcm", return_value=b"\x00\x01" * 3200):
+                    with patch("asr_proxy.providers.doubao.cleanup"):
+                        result = p.recognize(
+                            wav_bytes, filename="test.wav", model="asr-2.0",
+                        )
+
+        assert result.text == "豆包识别成功"
+        assert result.provider == "doubao"
+        assert result.model == "asr-2.0"
+        assert result.duration == 1.2
+        assert len(sent) >= 2
+        assert sent[0][1] >> 4 == 0b0001  # full client request
+
+@pytest.mark.integration
+class TestDoubaoLive:
+    """需要真实 DOUBAO_API_KEY 才会跑；无 Key 时自动跳过。"""
+
+    def test_recognize_wav(self, wav_bytes):
+        cfg = load_config()
+        doubao = cfg.providers.get("doubao")
+        if not doubao or not doubao.enabled:
+            pytest.skip("未配置豆包 api_key，跳过真实识别")
+        router = ProviderRouter(cfg)
+        result, errors = router.recognize(
+            wav_bytes, model="doubao/auto", filename="test_asr_16k.wav",
+        )
+        assert result.text
+        assert result.provider == "doubao"
+        print(f"豆包识别结果: {result.text!r} model={result.model} errors={errors}")
