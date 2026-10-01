@@ -55,34 +55,47 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         enabled = [
             {
                 "name": p.name,
-                "model": p.model_id,
+                "models": p.model_names,
+                "default_model": p.model_id,
                 "enabled": True,
             }
             for p in router.enabled_list()
         ]
+        model_ids = ["auto"]
+        for p in router.enabled_list():
+            model_ids.extend(p.public_model_ids())
         return {
             "status": "ok",
             "enabled_providers": enabled,
             "auto_order": [p.name for p in router.enabled_list()],
-            "models": ["auto"] + [p.model_id for p in router.enabled_list()],
+            "models": model_ids,
+            "last_success": {
+                "provider": router._last_provider,
+                "models": dict(router._last_model_by_provider),
+            },
         }
 
     @app.get("/v1/models")
     @app.get("/models")
     async def list_models():
         models = [{"id": "auto", "object": "model", "owned_by": "asr-proxy"}]
+        seen = {"auto"}
         for p in router.enabled_list():
-            models.append({
-                "id": p.model_id,
-                "object": "model",
-                "owned_by": p.name,
-            })
-            if p.model_id != p.name:
+            for mid in p.public_model_ids():
+                if mid not in seen:
+                    models.append({
+                        "id": mid,
+                        "object": "model",
+                        "owned_by": p.name,
+                    })
+                    seen.add(mid)
+            if p.name not in seen:
                 models.append({
                     "id": p.name,
                     "object": "model",
                     "owned_by": p.name,
                 })
+                seen.add(p.name)
         return {"object": "list", "data": models}
 
     # ---- 标准 multipart 转写（兼容 OpenAI /v1/audio/transcriptions）----
@@ -103,7 +116,10 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
             )
             if errors:
                 _log(f"[transcribe] failover errors={errors}")
-            _log(f"[transcribe] OK provider={result.provider} text={result.text!r}")
+            _log(
+                f"[transcribe] OK provider={result.provider} "
+                f"model={result.model} text={result.text!r}"
+            )
             return {
                 "task": "transcribe",
                 "language": result.language,
@@ -111,6 +127,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 "text": result.text,
                 "segments": result.segments or [],
                 "provider": result.provider,
+                "model": f"{result.provider}/{result.model}" if result.model else result.provider,
             }
         except Exception as e:
             _log(f"[transcribe] EXCEPTION {type(e).__name__}: {e}")
@@ -149,10 +166,14 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 if errors:
                     _log(f"[chat] failover errors={errors}")
                 if result.text:
-                    _log(f"[chat] OK provider={result.provider} text={result.text!r}")
+                    used = (
+                        f"{result.provider}/{result.model}"
+                        if result.model else result.provider
+                    )
+                    _log(f"[chat] OK provider={result.provider} model={result.model} text={result.text!r}")
                     return {
                         "choices": [{"message": {"content": result.text}}],
-                        "model": model,
+                        "model": used,
                         "provider": result.provider,
                     }
             except Exception as e:

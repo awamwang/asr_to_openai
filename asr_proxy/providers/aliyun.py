@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+from typing import Optional
 
 from asr_proxy.audio import cleanup, to_wav_16k_mono, write_temp_audio
 from asr_proxy.config import ProviderConfig
@@ -27,7 +28,12 @@ class AliyunProvider(AsrProvider):
             )
         return dashscope
 
-    def recognize(self, audio_bytes: bytes, filename: str = "audio.wav") -> AsrResult:
+    def recognize(
+        self,
+        audio_bytes: bytes,
+        filename: str = "audio.wav",
+        model: Optional[str] = None,
+    ) -> AsrResult:
         if not self.enabled:
             raise RuntimeError("阿里云 ASR 未启用（缺少 api_key）")
         if not audio_bytes:
@@ -39,12 +45,12 @@ class AliyunProvider(AsrProvider):
         suffix = os.path.splitext(filename or "")[1] or ".wav"
         tmp = write_temp_audio(audio_bytes, suffix=suffix)
         wav = None
+        used_model = (model or "").strip() or self.default_model or "qwen-audio-3.1-asr-flash-streaming"
         try:
             wav = to_wav_16k_mono(tmp, self.ffmpeg_path)
             self._configure_dashscope()
-            model = self.config.model or "qwen-audio-3.1-asr-flash-streaming"
             recognition = Recognition(
-                model=model, format="wav", sample_rate=16000, callback=None,
+                model=used_model, format="wav", sample_rate=16000, callback=None,
             )
             result = recognition.call(wav)
             if result.status_code != HTTPStatus.OK:
@@ -79,6 +85,7 @@ class AliyunProvider(AsrProvider):
                 duration=duration_ms / 1000.0,
                 segments=segments,
                 provider=self.name,
+                model=used_model,
             )
         finally:
             cleanup(tmp, wav)

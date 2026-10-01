@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
@@ -15,6 +15,33 @@ DEFAULT_CONFIG_PATH = ROOT / "config.yaml"
 EXAMPLE_CONFIG_PATH = ROOT / "config.example.yaml"
 
 
+def _normalize_models(
+    models: Optional[Union[str, List[Any]]] = None,
+    model: Optional[str] = None,
+) -> List[str]:
+    """将 model / models 统一为去重后的有序列表。"""
+    result: List[str] = []
+    seen = set()
+
+    def _add(item: Any) -> None:
+        s = str(item or "").strip()
+        if s and s not in seen:
+            result.append(s)
+            seen.add(s)
+
+    if isinstance(models, list):
+        for item in models:
+            _add(item)
+    elif isinstance(models, str):
+        for part in models.split(","):
+            _add(part)
+
+    if model:
+        _add(model)
+
+    return result
+
+
 @dataclass
 class ProviderConfig:
     """单个 ASR 服务商配置。"""
@@ -22,12 +49,27 @@ class ProviderConfig:
     api_key: str = ""
     workspace_id: str = ""
     base_url: str = ""
-    model: str = ""
+    # 该服务商下可切换的模型列表（顺序即 provider/auto 尝试顺序）
+    models: List[str] = field(default_factory=list)
 
     @property
     def enabled(self) -> bool:
         """api_key 存在则启用该服务商。"""
         return bool(self.api_key and self.api_key.strip())
+
+    @property
+    def model(self) -> str:
+        """默认模型（列表首项），兼容旧字段访问。"""
+        return self.models[0] if self.models else ""
+
+    @model.setter
+    def model(self, value: str) -> None:
+        value = (value or "").strip()
+        if not value:
+            return
+        if value in self.models:
+            self.models.remove(value)
+        self.models.insert(0, value)
 
 
 @dataclass
@@ -72,7 +114,18 @@ def _first_env(*keys: str, default: str = "") -> str:
 def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
     """合并 YAML 与环境变量，环境变量优先。"""
     raw = raw or {}
+    yaml_models = _normalize_models(
+        models=raw.get("models"),
+        model=str(raw.get("model") or "").strip() or None,
+    )
+
     if name == "aliyun":
+        env_models = _first_env("DASHSCOPE_ASR_MODELS", "ALIYUN_ASR_MODELS")
+        env_model = _first_env("DASHSCOPE_ASR_MODEL", "ALIYUN_ASR_MODEL")
+        models = _normalize_models(
+            models=env_models or None,
+            model=env_model or None,
+        ) or yaml_models or ["qwen-audio-3.1-asr-flash-streaming"]
         return ProviderConfig(
             name=name,
             api_key=_first_env(
@@ -83,12 +136,15 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
                 "DASHSCOPE_WORKSPACE_ID", "ALIYUN_WORKSPACE_ID",
                 default=str(raw.get("workspace_id") or "").strip(),
             ),
-            model=_first_env(
-                "DASHSCOPE_ASR_MODEL", "ALIYUN_ASR_MODEL",
-                default=str(raw.get("model") or "qwen-audio-3.1-asr-flash-streaming").strip(),
-            ),
+            models=models,
         )
     if name == "grok":
+        env_models = _first_env("GROK_ASR_MODELS", "XAI_ASR_MODELS")
+        env_model = _first_env("GROK_ASR_MODEL", "XAI_ASR_MODEL")
+        models = _normalize_models(
+            models=env_models or None,
+            model=env_model or None,
+        ) or yaml_models
         return ProviderConfig(
             name=name,
             api_key=_first_env(
@@ -99,17 +155,14 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
                 "GROK_BASE_URL", "XAI_BASE_URL",
                 default=str(raw.get("base_url") or "https://api.x.ai/v1").strip(),
             ),
-            model=_first_env(
-                "GROK_ASR_MODEL", "XAI_ASR_MODEL",
-                default=str(raw.get("model") or "").strip(),
-            ),
+            models=models,
         )
     return ProviderConfig(
         name=name,
         api_key=str(raw.get("api_key") or "").strip(),
         workspace_id=str(raw.get("workspace_id") or "").strip(),
         base_url=str(raw.get("base_url") or "").strip(),
-        model=str(raw.get("model") or "").strip(),
+        models=yaml_models,
     )
 
 

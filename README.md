@@ -4,7 +4,9 @@
 
 - **主入口**：`main.py`
 - **默认端口**：`8004`（可用 `ASR_PORT` 或 config 修改）
-- **模型 `auto`**：按配置顺序自动切换已启用服务商，出错则试下一个
+- **模型命名**：`服务商/模型`，例如 `aliyun/qwen-audio-3.1-asr-flash-streaming`
+- **`auto`**：只在服务商之间切换（每家用其优先模型），出错则试下一个；成功后下次优先从该服务商开始
+- **`服务商/auto`**（如 `aliyun/auto`）：只在该服务商的模型列表内切换；成功后下次优先从该模型开始
 
 当前能力：
 | 服务商 | 状态 | 启用条件 |
@@ -14,7 +16,7 @@
 
 ---
 
-## 一、闪电说真实协议（最关键）
+## 一、闪电说真实协议（最重要）
 
 面板**不走** OpenAI 的 `/v1/audio/transcriptions`，而是：
 
@@ -55,19 +57,21 @@ providers:
   aliyun:
     api_key: "sk-你的Key"
     workspace_id: "你的工作空间ID"
-    model: "qwen-audio-3.1-asr-flash-streaming"
+    models:
+      - qwen-audio-3.1-asr-flash-streaming
+      - qwen3-asr-flash-realtime
   grok:
     api_key: ""          # 占位，填了也会启用，但识别尚未实现
     base_url: "https://api.x.ai/v1"
-    model: ""
+    models: []
 ```
 
 也可用环境变量（优先于 YAML）：
 
 | 服务商 | 环境变量 |
 |---|---|
-| 阿里云 | `DASHSCOPE_API_KEY` / `ALIYUN_API_KEY`，`DASHSCOPE_WORKSPACE_ID` |
-| Grok | `XAI_API_KEY` / `GROK_API_KEY`，`GROK_BASE_URL`，`GROK_ASR_MODEL` |
+| 阿里云 | `DASHSCOPE_API_KEY` / `ALIYUN_API_KEY`，`DASHSCOPE_WORKSPACE_ID`，`DASHSCOPE_ASR_MODELS`（逗号分隔）或 `DASHSCOPE_ASR_MODEL` |
+| Grok | `XAI_API_KEY` / `GROK_API_KEY`，`GROK_BASE_URL`，`GROK_ASR_MODELS` / `GROK_ASR_MODEL` |
 | 通用 | `ASR_PORT`，`ASR_LOG`，`FFMPEG_PATH` |
 
 ### 3. 启动
@@ -82,7 +86,7 @@ python main.py
 |---|---|
 | 地址 | `http://127.0.0.1:8004` |
 | API Key | 随便填（本地无鉴权） |
-| 模型 | `auto`（推荐）或 `qwen-audio-3.1-asr-flash-streaming` / `aliyun` |
+| 模型 | `auto`（跨服务商）/ `aliyun/auto`（阿里云内切模型）/ `aliyun/qwen-audio-3.1-asr-flash-streaming`（指定） |
 
 地址带不带 `/v1` 均可。
 
@@ -90,8 +94,8 @@ python main.py
 
 ## 三、接口清单
 
-- `GET /health`：查看已启用服务商
-- `GET /v1/models`：列出 `auto` 及已启用模型
+- `GET /health`：查看已启用服务商、模型列表、上次成功记录
+- `GET /v1/models`：列出 `auto`、`服务商/auto` 及全部 `服务商/模型`
 - `POST /chat/completions`（`/v1/...`）：闪电说主路径，JSON base64 音频 → `choices[0].message.content`
 - `POST /audio/transcriptions`（`/v1/...`）：标准 multipart 兼容，返回 verbose_json
 

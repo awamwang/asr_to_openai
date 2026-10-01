@@ -2,6 +2,7 @@
 """服务商注册与 auto 路由。"""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from asr_proxy.config import AppConfig
@@ -15,6 +16,17 @@ _FACTORY = {
 }
 
 
+@dataclass
+class RouteCandidate:
+    """一次识别尝试的候选：服务商 + 具体模型名。"""
+    provider: AsrProvider
+    model: str
+
+    @property
+    def label(self) -> str:
+        return f"{self.provider.name}/{self.model}"
+
+
 def build_providers(cfg: AppConfig) -> Dict[str, AsrProvider]:
     """根据配置构建全部服务商实例（含未启用的，便于查状态）。"""
     result: Dict[str, AsrProvider] = {}
@@ -26,12 +38,27 @@ def build_providers(cfg: AppConfig) -> Dict[str, AsrProvider]:
     return result
 
 
+def _rotate_from(items: List[str], start: Optional[str]) -> List[str]:
+    """将 start 移到队首，其余保持相对顺序（环形旋转）。"""
+    if not items or not start:
+        return list(items)
+    key = start.lower()
+    idx = next((i for i, x in enumerate(items) if x.lower() == key), -1)
+    if idx <= 0:
+        return list(items)
+    return items[idx:] + items[:idx]
+
+
 class ProviderRouter:
-    """按 model 选择服务商；model=auto 时按顺序容错切换。"""
+    """按 model 选择服务商/模型；支持 auto 与 服务商/auto 容错切换。"""
 
     def __init__(self, cfg: AppConfig, providers: Optional[Dict[str, AsrProvider]] = None):
         self.cfg = cfg
         self.providers = providers or build_providers(cfg)
+        # 上次成功的服务商；下次 auto 默认从此开始
+        self._last_provider: Optional[str] = None
+        # 各服务商上次成功的模型；下次 auto / 服务商/auto 默认从此开始
+        self._last_model_by_provider: Dict[str, str] = {}
 
     def enabled_list(self) -> List[AsrProvider]:
         """按 auto_order 返回已启用服务商。"""
@@ -42,22 +69,87 @@ class ProviderRouter:
                 result.append(p)
         return result
 
-    def resolve(self, model: str) -> List[AsrProvider]:
-        """解析请求 model，返回按优先级排列的候选服务商列表。"""
-        m = (model or "").strip().lower()
+    def remember_success(self, provider_name: str, model_name: str) -> None:
+        """记录成功的服务商与模型，供下次请求优先使用。"""
+        if not provider_name:
+            return
+        self._last_provider = provider_name
+        if model_name:
+            self._last_model_by_provider[provider_name] = model_name
+
+    def _preferred_model(self, provider: AsrProvider) -> str:
+        """取服务商优先模型：上次成功 > 配置首项。"""
+        remembered = self._last_model_by_provider.get(provider.name)
+        if remembered and provider.has_model(remembered):
+            return remembered
+        return provider.default_model
+
+    def _models_for_provider_auto(self, provider: AsrProvider) -> List[str]:
+        """服务商内 auto：从上次成功模型开始轮转。"""
+        names = provider.model_names
+        if not names:
+            return [provider.default_model]
+        start = self._last_model_by_provider.get(provider.name)
+        return _rotate_from(names, start)
+
+    def resolve(self, model: str) -> List[RouteCandidate]:
+        """解析请求 model，返回按优先级排列的候选列表。"""
+        raw = (model or "").strip()
+        m = raw.lower()
         if not m or m == "auto":
-            return self.enabled_list()
+            return self._resolve_global_auto()
 
-        # 精确匹配服务商名或该服务商配置的模型名
-        matched: List[AsrProvider] = []
-        for p in self.providers.values():
-            if p.enabled and p.matches_model(m):
-                matched.append(p)
-        if matched:
-            return matched
+        if "/" in raw:
+            provider_name, _, rest = raw.partition("/")
+            provider_name = provider_name.strip()
+            rest = rest.strip()
+            p = self.providers.get(provider_name)
+            if not p or not p.enabled:
+                # 大小写不敏感查找
+                p = next(
+                    (x for x in self.providers.values()
+                     if x.enabled and x.name.lower() == provider_name.lower()),
+                    None,
+                )
+            if not p or not p.enabled:
+                return []
+            if not rest or rest.lower() == "auto":
+                return [
+                    RouteCandidate(provider=p, model=name)
+                    for name in self._models_for_provider_auto(p)
+                ]
+            if p.has_model(rest):
+                # 保持配置中的原始大小写
+                actual = next(x for x in p.model_names if x.lower() == rest.lower())
+                return [RouteCandidate(provider=p, model=actual)]
+            # 允许未列入配置但显式指定的模型
+            return [RouteCandidate(provider=p, model=rest)]
 
-        # 未匹配到任何已启用服务商
-        return []
+        # 兼容：仅服务商名 → 该服务商默认/上次成功模型（不切模型）
+        for p in self.enabled_list():
+            if p.name.lower() == m:
+                return [RouteCandidate(provider=p, model=self._preferred_model(p))]
+
+        # 兼容：裸模型名 → 匹配拥有该模型的已启用服务商
+        matched: List[RouteCandidate] = []
+        for p in self.enabled_list():
+            if p.has_model(raw):
+                actual = next(x for x in p.model_names if x.lower() == m)
+                matched.append(RouteCandidate(provider=p, model=actual))
+        return matched
+
+    def _resolve_global_auto(self) -> List[RouteCandidate]:
+        """全局 auto：只在服务商之间切换，每家用一个优先模型。"""
+        providers = self.enabled_list()
+        if not providers:
+            return []
+        names = [p.name for p in providers]
+        ordered_names = _rotate_from(names, self._last_provider)
+        by_name = {p.name: p for p in providers}
+        return [
+            RouteCandidate(provider=by_name[n], model=self._preferred_model(by_name[n]))
+            for n in ordered_names
+        ]
 
     def recognize(
         self,
@@ -75,15 +167,21 @@ class ProviderRouter:
 
         errors: List[str] = []
         last_exc: Optional[BaseException] = None
-        for p in candidates:
+        for c in candidates:
             try:
-                result = p.recognize(audio_bytes, filename=filename)
+                result = c.provider.recognize(
+                    audio_bytes, filename=filename, model=c.model,
+                )
                 if result and result.text:
+                    used_model = result.model or c.model
+                    result.provider = result.provider or c.provider.name
+                    result.model = used_model
+                    self.remember_success(c.provider.name, used_model)
                     return result, errors
-                errors.append(f"{p.name}: 返回空文本")
+                errors.append(f"{c.label}: 返回空文本")
             except Exception as e:
                 last_exc = e
-                errors.append(f"{p.name}: {type(e).__name__}: {e}")
+                errors.append(f"{c.label}: {type(e).__name__}: {e}")
                 continue
 
         detail = "; ".join(errors) if errors else "unknown"

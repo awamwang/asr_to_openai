@@ -11,7 +11,7 @@ server:
 ffmpeg_path: "ffmpeg"
 # 可用环境变量 FFMPEG_PATH 覆盖
 
-# auto 模型按此顺序依次尝试；出错则切换下一个
+# auto：只在服务商之间切换；出错则试下一个。成功后下次优先从该服务商开始。
 auto_order:
   - aliyun
   - grok
@@ -22,8 +22,12 @@ providers:
     api_key: ""
     # 环境变量：DASHSCOPE_WORKSPACE_ID / ALIYUN_WORKSPACE_ID
     workspace_id: ""
-    # 环境变量：DASHSCOPE_ASR_MODEL / ALIYUN_ASR_MODEL
-    model: "qwen-audio-3.1-asr-flash-streaming"
+    # 多模型列表。对外 ID：aliyun/<模型名>；aliyun/auto 在此列表内切换。
+    # 环境变量：DASHSCOPE_ASR_MODELS / ALIYUN_ASR_MODELS（逗号分隔）
+    # 或单模型：DASHSCOPE_ASR_MODEL / ALIYUN_ASR_MODEL
+    models:
+      - qwen-audio-3.1-asr-flash-streaming
+      - qwen3-asr-flash-realtime
 
   grok:
     # 占位：尚未实现识别逻辑。填写 api_key 后会在列表中显示为已启用，调用时返回未实现错误。
@@ -31,5 +35,5 @@ providers:
     api_key: ""
     # 环境变量：GROK_BASE_URL / XAI_BASE_URL
     base_url: "https://api.x.ai/v1"
-    # 环境变量：GROK_ASR_MODEL / XAI_ASR_MODEL
-    model: ""
+    # 环境变量：GROK_ASR_MODELS / XAI_ASR_MODELS 或 GROK_ASR_MODEL
+    models: []
