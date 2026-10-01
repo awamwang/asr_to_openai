@@ -1,0 +1,35 @@
+# 复制为 config.yaml 后填写。也可通过环境变量覆盖（见各字段注释）。
+# 规则：某服务商的 api_key 非空 → 启用该服务商。
+
+server:
+  host: "127.0.0.1"
+  port: 8004
+  # 可用环境变量 ASR_PORT 覆盖
+  log_file: "asr_proxy.log"
+  # 可用环境变量 ASR_LOG 覆盖
+
+ffmpeg_path: "ffmpeg"
+# 可用环境变量 FFMPEG_PATH 覆盖
+
+# auto 模型按此顺序依次尝试；出错则切换下一个
+auto_order:
+  - aliyun
+  - grok
+
+providers:
+  aliyun:
+    # 环境变量：DASHSCOPE_API_KEY / ALIYUN_API_KEY
+    api_key: ""
+    # 环境变量：DASHSCOPE_WORKSPACE_ID / ALIYUN_WORKSPACE_ID
+    workspace_id: ""
+    # 环境变量：DASHSCOPE_ASR_MODEL / ALIYUN_ASR_MODEL
+    model: "qwen-audio-3.1-asr-flash-streaming"
+
+  grok:
+    # 占位：尚未实现识别逻辑。填写 api_key 后会在列表中显示为已启用，调用时返回未实现错误。
+    # 环境变量：XAI_API_KEY / GROK_API_KEY
+    api_key: ""
+    # 环境变量：GROK_BASE_URL / XAI_BASE_URL
+    base_url: "https://api.x.ai/v1"
+    # 环境变量：GROK_ASR_MODEL / XAI_ASR_MODEL
+    model: ""

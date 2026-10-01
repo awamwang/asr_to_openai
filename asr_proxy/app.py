@@ -1,0 +1,219 @@
+# -*- coding: utf-8 -*-
+"""FastAPI 应用：将多厂商 ASR 桥接为闪电说可用的 /chat/completions 格式。"""
+from __future__ import annotations
+
+import base64
+import json
+import os
+from typing import Any, List, Optional
+
+from fastapi import FastAPI, Form, Request, UploadFile
+
+from asr_proxy.config import AppConfig, load_config
+from asr_proxy.providers import ProviderRouter
+
+
+def _ensure_log_path(path: str) -> str:
+    """相对路径则落到项目根目录。"""
+    if os.path.isabs(path):
+        return path
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(root, path)
+
+
+def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
+    """创建 FastAPI 应用。"""
+    cfg = cfg or load_config()
+    router = ProviderRouter(cfg)
+    log_file = _ensure_log_path(cfg.log_file)
+
+    app = FastAPI(title="ASR to OpenAI Proxy", version="1.0.0")
+    app.state.cfg = cfg
+    app.state.router_asr = router
+    app.state.log_file = log_file
+
+    def _log(msg: str) -> None:
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except Exception:
+            pass
+
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        try:
+            ct = request.headers.get("content-type")
+            cl = request.headers.get("content-length")
+            _log(f"[HTTP] {request.method} {request.url.path} content-type={ct} content-length={cl}")
+        except Exception:
+            pass
+        return await call_next(request)
+
+    @app.get("/")
+    @app.get("/health")
+    async def health():
+        enabled = [
+            {
+                "name": p.name,
+                "model": p.model_id,
+                "enabled": True,
+            }
+            for p in router.enabled_list()
+        ]
+        return {
+            "status": "ok",
+            "enabled_providers": enabled,
+            "auto_order": [p.name for p in router.enabled_list()],
+            "models": ["auto"] + [p.model_id for p in router.enabled_list()],
+        }
+
+    @app.get("/v1/models")
+    @app.get("/models")
+    async def list_models():
+        models = [{"id": "auto", "object": "model", "owned_by": "asr-proxy"}]
+        for p in router.enabled_list():
+            models.append({
+                "id": p.model_id,
+                "object": "model",
+                "owned_by": p.name,
+            })
+            if p.model_id != p.name:
+                models.append({
+                    "id": p.name,
+                    "object": "model",
+                    "owned_by": p.name,
+                })
+        return {"object": "list", "data": models}
+
+    # ---- 标准 multipart 转写（兼容 OpenAI /v1/audio/transcriptions）----
+
+    @app.post("/v1/audio/transcriptions")
+    @app.post("/audio/transcriptions")
+    async def transcribe(
+        file: UploadFile,
+        model: str = Form("auto"),
+    ):
+        audio_bytes = await file.read()
+        if not audio_bytes:
+            return {"error": {"message": "empty audio", "status_code": 400}}
+        _log(f"[transcribe] file={file.filename} bytes={len(audio_bytes)} model={model}")
+        try:
+            result, errors = router.recognize(
+                audio_bytes, model=model, filename=file.filename or "audio.wav",
+            )
+            if errors:
+                _log(f"[transcribe] failover errors={errors}")
+            _log(f"[transcribe] OK provider={result.provider} text={result.text!r}")
+            return {
+                "task": "transcribe",
+                "language": result.language,
+                "duration": result.duration,
+                "text": result.text,
+                "segments": result.segments or [],
+                "provider": result.provider,
+            }
+        except Exception as e:
+            _log(f"[transcribe] EXCEPTION {type(e).__name__}: {e}")
+            return {"error": {"message": f"{type(e).__name__}: {e}", "status_code": 500}}
+
+    # ---- 闪电说自定义 ASR：/chat/completions + JSON base64 ----
+
+    @app.post("/v1/chat/completions")
+    @app.post("/chat/completions")
+    async def chat(request: Request):
+        body = await request.body()
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except Exception as e:
+            _log(f"[chat] body parse error: {type(e).__name__}: {e}")
+            return {"choices": [{"message": {"content": ""}}]}
+
+        structure = _describe_structure(data)
+        _log("[chat] BODY_STRUCTURE:\n" + "\n".join(structure))
+
+        model = str(data.get("model") or "auto")
+        candidates = _find_audio_b64(data)
+        if not candidates:
+            _log("[chat] no audio base64 found in body")
+            return {"choices": [{"message": {"content": ""}}]}
+
+        for i, b64str in enumerate(candidates):
+            try:
+                audio_bytes = _try_decode_b64(b64str)
+                if len(audio_bytes) < 100:
+                    continue
+                _log(f"[chat] candidate[{i}] decoded bytes={len(audio_bytes)} model={model}")
+                result, errors = router.recognize(
+                    audio_bytes, model=model, filename="audio.wav",
+                )
+                if errors:
+                    _log(f"[chat] failover errors={errors}")
+                if result.text:
+                    _log(f"[chat] OK provider={result.provider} text={result.text!r}")
+                    return {
+                        "choices": [{"message": {"content": result.text}}],
+                        "model": model,
+                        "provider": result.provider,
+                    }
+            except Exception as e:
+                _log(f"[chat] candidate[{i}] error: {type(e).__name__}: {e}")
+                continue
+
+        _log("[chat] recognition produced no text")
+        return {"choices": [{"message": {"content": ""}}]}
+
+    return app
+
+
+def _try_decode_b64(s: str) -> bytes:
+    """解码 base64，兼容 data:audio/...;base64, 前缀。"""
+    if "," in s[:40]:
+        s = s.split(",", 1)[1]
+    return base64.b64decode(s)
+
+
+def _describe_structure(data: Any, prefix: str = "", depth: int = 0, out: Optional[List[str]] = None) -> List[str]:
+    """递归描述 JSON 结构，长字符串只记录长度。"""
+    if out is None:
+        out = []
+    indent = "  " * depth
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if isinstance(v, (dict, list)):
+                out.append(f"{indent}{prefix}{k}: {type(v).__name__}")
+                _describe_structure(v, prefix + k + ".", depth + 1, out)
+            elif isinstance(v, str) and len(v) > 2000:
+                out.append(f"{indent}{prefix}{k}: str(len={len(v)}) <可能为 base64 音频>")
+            else:
+                out.append(f"{indent}{prefix}{k}: {type(v).__name__}")
+    elif isinstance(data, list):
+        for i, v in enumerate(data[:5]):
+            if isinstance(v, (dict, list)):
+                out.append(f"{indent}{prefix}[{i}]: {type(v).__name__}")
+                _describe_structure(v, prefix + f"[{i}]" + ".", depth + 1, out)
+            elif isinstance(v, str) and len(v) > 2000:
+                out.append(f"{indent}{prefix}[{i}]: str(len={len(v)}) <可能为 base64 音频>")
+            else:
+                out.append(f"{indent}{prefix}[{i}]: {type(v).__name__}")
+    return out
+
+
+def _find_audio_b64(data: Any, out: Optional[List[str]] = None) -> List[str]:
+    """递归查找可能是 base64 音频的长字符串。"""
+    if out is None:
+        out = []
+    if isinstance(data, dict):
+        # 优先识别明确的 input_audio.data 字段（即使较短）
+        if "input_audio" in data and isinstance(data["input_audio"], dict):
+            d = data["input_audio"].get("data")
+            if isinstance(d, str) and len(d) > 100:
+                out.append(d)
+        for v in data.values():
+            _find_audio_b64(v, out)
+    elif isinstance(data, list):
+        for v in data:
+            _find_audio_b64(v, out)
+    elif isinstance(data, str) and len(data) > 2000:
+        if data not in out:
+            out.append(data)
+    return out
