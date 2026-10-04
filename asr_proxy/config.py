@@ -72,6 +72,10 @@ class ProviderConfig:
     timeout: float = 300.0
     # 该服务商下可切换的模型列表（顺序即 provider/auto 尝试顺序）
     models: List[str] = field(default_factory=list)
+    # 阿里云流式 ASR 断句：False=VAD（默认），True=语义断句
+    semantic_punctuation_enabled: bool = False
+    # 阿里云 VAD 静音阈值（ms），范围 [200, 6000]，默认 1300
+    max_sentence_silence: int = 1300
 
     @property
     def enabled(self) -> bool:
@@ -144,6 +148,41 @@ def _float_env(*keys: str, default: float = 300.0) -> float:
         return default
 
 
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in ("1", "true", "yes", "on"):
+        return True
+    if s in ("0", "false", "no", "off", ""):
+        return False
+    return default
+
+
+def _bool_env(*keys: str, default: bool = False) -> bool:
+    raw = _first_env(*keys)
+    if not raw:
+        return default
+    return _as_bool(raw, default=default)
+
+
+def _clamp_sentence_silence(value: Any, default: int = 1300) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        n = default
+    return max(200, min(6000, n))
+
+
+def _int_env(*keys: str, default: int = 1300) -> int:
+    raw = _first_env(*keys)
+    if not raw:
+        return default
+    return _clamp_sentence_silence(raw, default=default)
+
+
 def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
     """合并 YAML 与环境变量，环境变量优先。"""
     raw = raw or {}
@@ -164,6 +203,15 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             models=env_models or None,
             model=env_model or None,
         ) or yaml_models or ["qwen-audio-3.1-asr-flash-streaming"]
+        yaml_silence = raw.get("max_sentence_silence")
+        yaml_silence_default = (
+            _clamp_sentence_silence(yaml_silence)
+            if yaml_silence is not None
+            else 1300
+        )
+        yaml_semantic = _as_bool(
+            raw.get("semantic_punctuation_enabled"), default=False,
+        )
         return ProviderConfig(
             name=name,
             api_key=_first_env(
@@ -176,6 +224,16 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             ),
             models=models,
             timeout=_float_env("ALIYUN_TIMEOUT", default=default_timeout),
+            semantic_punctuation_enabled=_bool_env(
+                "DASHSCOPE_SEMANTIC_PUNCTUATION",
+                "ALIYUN_SEMANTIC_PUNCTUATION",
+                default=yaml_semantic,
+            ),
+            max_sentence_silence=_int_env(
+                "DASHSCOPE_MAX_SENTENCE_SILENCE",
+                "ALIYUN_MAX_SENTENCE_SILENCE",
+                default=yaml_silence_default,
+            ),
         )
     if name in ("groq", "grok"):
         # grok 为历史误写，统一按 Groq 处理

@@ -31,6 +31,13 @@ providers:
       - qwen-audio-3.1-asr-flash-streaming
       - qwen-audio-3.0-asr-flash
       - qwen3-asr-flash-realtime
+    # 流式断句（仅 streaming/realtime）。标点预测本身无法关闭。
+    # False=VAD 断句（默认）；True=语义断句，少靠停顿、延迟更高。
+    # 环境变量：DASHSCOPE_SEMANTIC_PUNCTUATION / ALIYUN_SEMANTIC_PUNCTUATION
+    semantic_punctuation_enabled: false
+    # VAD 静音多久算一句结束（ms），范围 200–6000，官方默认 1300。
+    # 调大可减少极短停顿被切成逗号/句号。环境变量：DASHSCOPE_MAX_SENTENCE_SILENCE
+    max_sentence_silence: 2500
 
   groq:
     # Groq Whisper（OpenAI 兼容）。环境变量：GROQ_API_KEY

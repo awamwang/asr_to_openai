@@ -160,7 +160,12 @@ class AliyunProvider(AsrProvider):
         from dashscope.audio.asr import Recognition
 
         recognition = Recognition(
-            model=used_model, format="wav", sample_rate=16000, callback=None,
+            model=used_model,
+            format="wav",
+            sample_rate=16000,
+            callback=None,
+            semantic_punctuation_enabled=self.config.semantic_punctuation_enabled,
+            max_sentence_silence=self.config.max_sentence_silence,
         )
         result = recognition.call(wav_path)
         if result.status_code != HTTPStatus.OK:

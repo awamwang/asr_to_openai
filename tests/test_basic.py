@@ -155,6 +155,8 @@ class TestConfig:
         assert "siliconflow" in cfg.providers
         assert any("SenseVoice" in m for m in cfg.providers["siliconflow"].models)
         assert "siliconflow.cn" in cfg.providers["siliconflow"].base_url
+        assert cfg.providers["aliyun"].semantic_punctuation_enabled is False
+        assert cfg.providers["aliyun"].max_sentence_silence == 2500
 
     def test_api_key_enables_provider(self, cfg_aliyun_only):
         enabled = cfg_aliyun_only.enabled_providers()
@@ -443,6 +445,42 @@ class TestAutoFailover:
                         filename="test.wav",
                         model="qwen-audio-3.0-asr-flash-filetrans",
                     )
+
+    def test_streaming_passes_sentence_silence(self, cfg_aliyun_only, wav_bytes):
+        cfg_aliyun_only.providers["aliyun"].max_sentence_silence = 2500
+        cfg_aliyun_only.providers["aliyun"].semantic_punctuation_enabled = False
+        p = AliyunProvider(cfg_aliyun_only.providers["aliyun"], ffmpeg_path="ffmpeg")
+        captured = {}
+
+        class FakeResult:
+            status_code = 200
+            message = "ok"
+
+            def get_sentence(self):
+                return [{"text": "你好", "begin_time": 0, "end_time": 800}]
+
+        class FakeRecognition:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def call(self, path):
+                captured["call_path"] = path
+                return FakeResult()
+
+        with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
+            with patch("asr_proxy.providers.aliyun.cleanup"):
+                with patch(
+                    "dashscope.audio.asr.Recognition",
+                    FakeRecognition,
+                ):
+                    result = p.recognize(
+                        wav_bytes,
+                        filename="test.wav",
+                        model="qwen-audio-3.1-asr-flash-streaming",
+                    )
+        assert result.text == "你好"
+        assert captured.get("max_sentence_silence") == 2500
+        assert captured.get("semantic_punctuation_enabled") is False
 
 
 class TestHttpApi:
