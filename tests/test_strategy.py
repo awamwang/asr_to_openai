@@ -157,10 +157,9 @@ class TestMetadata:
         assert flash.cost.min_bill_sec == 1.0
         assert flash.cost.max_duration == 2 * 3600
         assert flash.cost.max_bytes == 100 * 1024 * 1024
+        # 异步大模型 2.0 本轮未接入，档案已移除 → 走 unknown 回退
         async_m = get_profile("tencent", "16k_zh_en_2.0")
-        assert async_m.cost.min_bill_sec == 1.0
-        assert async_m.cost.max_duration == 0
-        assert async_m.cost.max_bytes == 0
+        assert async_m.cost.billing == "unknown"
 
     def test_silicon_5min_is_not_hard_limit(self):
         p = get_profile("siliconflow", "SenseVoiceSmall")
@@ -371,12 +370,17 @@ class TestHardLimits:
 
     def test_tencent_flash_excluded_over_2h_or_100mb(self):
         flash = [(_FakeProvider("tencent", ["16k_zh_en"]), "16k_zh_en")]
-        async_m = [(_FakeProvider("tencent", ["16k_zh_en_2.0"]), "16k_zh_en_2.0")]
         assert _pair_labels(SpeedFirstStrategy().rank(flash, duration=2 * 3600 + 1)) == []
         assert _pair_labels(
             SpeedFirstStrategy().rank(flash, duration=60, file_size=100 * 1024 * 1024 + 1),
         ) == []
-        # 异步大模型 2.0 无这两条硬限
+        # 未超限时保留
+        assert _pair_labels(
+            SpeedFirstStrategy().rank(flash, duration=60, file_size=1024),
+        ) == [("tencent", "16k_zh_en")]
+        # 异步 2.0 未接入：无档案硬限，不作为正式候选依赖
+        async_m = [(_FakeProvider("tencent", ["16k_zh_en_2.0"]), "16k_zh_en_2.0")]
+        assert get_profile("tencent", "16k_zh_en_2.0").cost.billing == "unknown"
         assert _pair_labels(
             SpeedFirstStrategy().rank(async_m, duration=3 * 3600, file_size=200 * 1024 * 1024),
         ) == [("tencent", "16k_zh_en_2.0")]

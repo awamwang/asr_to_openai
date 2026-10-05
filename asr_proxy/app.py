@@ -232,7 +232,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         return _error_response(
             502,
             last_error or "recognition produced no text",
-            hint="检查模型名（groq/... / aliyun/... / auto / strategy-cost / strategy-free）、api_key，以及 groq.proxy 是否可达",
+            hint="检查模型名（groq/... / aliyun/... / stepfun/... / tencent/... / baidu/... / auto / strategy-*）、密钥，以及 groq.proxy 是否可达",
         )
 
     return app

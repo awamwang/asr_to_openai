@@ -236,7 +236,7 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
         ),
     ),
 
-    # ---- 拟新增平台（docs/asr_models_guide.md；对应服务商接入后自动参与路由）----
+    # ---- 已接入平台（docs/asr_models_guide.md）----
     ("stepfun", "stepaudio-2.5-asr"): _p(
         "stepfun", "stepaudio-2.5-asr",
         speed=3, accuracy=2,  # 文档 S2–S3，取保守 S3
@@ -257,13 +257,7 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
             max_bytes=_TENCENT_FLASH_MAX_BYTES,
         ),
     ),
-    ("tencent", "16k_zh_en_2.0"): _p(  # 录音文件识别·大模型 2.0，异步
-        "tencent", "16k_zh_en_2.0",
-        speed=5, accuracy=1,
-        cost=_per_sec(  # 0.8 元/时；按时长产品最低计费 1 秒
-            0.000222, free_tier="quota", min_bill_sec=1.0,
-        ),
-    ),
+    # 腾讯 16k_zh_en_2.0（异步大模型 2.0）需公网 URL，本轮未接入，不登记档案
     ("baidu", "1537"): _p(  # 短语音识别标准版，硬限 60s
         "baidu", "1537",
         speed=3, accuracy=3,

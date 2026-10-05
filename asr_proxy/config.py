@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""配置加载：YAML + 环境变量。api_key 非空即视为启用该服务商。"""
+"""配置加载：YAML + 环境变量。密钥完备即视为启用该服务商。"""
 from __future__ import annotations
 
 import os
@@ -16,6 +16,11 @@ EXAMPLE_CONFIG_PATH = ROOT / "config.example.yaml"
 
 # SOCKS 别名：socks5:// 本地解析 DNS 访问 Groq 常 TLS 失败，需 socks5h://
 _SOCKS_ALIASES = {"socks5": "socks5h", "socks4": "socks4a"}
+
+_DEFAULT_AUTO_ORDER = [
+    "aliyun", "doubao", "siliconflow", "groq",
+    "stepfun", "tencent", "baidu",
+]
 
 
 def normalize_proxy(raw: Optional[str]) -> str:
@@ -65,8 +70,11 @@ class ProviderConfig:
     name: str
     api_key: str = ""
     workspace_id: str = ""
-    # 豆包旧版控制台 APP ID（X-Api-App-Key）；新版只需 api_key
+    # 豆包旧版 / 腾讯 / 百度 AppID
     app_id: str = ""
+    # 腾讯云 CAM：SecretId / SecretKey
+    secret_id: str = ""
+    secret_key: str = ""
     base_url: str = ""
     proxy: str = ""
     timeout: float = 300.0
@@ -79,7 +87,16 @@ class ProviderConfig:
 
     @property
     def enabled(self) -> bool:
-        """api_key 存在则启用该服务商。"""
+        """密钥完备则启用：腾讯看 secret_id+secret_key，百度看 api_key+secret_key，其余看 api_key。"""
+        name = (self.name or "").strip().lower()
+        if name == "tencent":
+            return bool(
+                (self.secret_id or "").strip() and (self.secret_key or "").strip()
+            )
+        if name == "baidu":
+            return bool(
+                (self.api_key or "").strip() and (self.secret_key or "").strip()
+            )
         return bool(self.api_key and self.api_key.strip())
 
     @property
@@ -107,7 +124,7 @@ class AppConfig:
     # 兼容字段：不再改写 auto。真正策略请请求模型 ID strategy-cost 等。
     strategy: str = "auto"
     auto_order: List[str] = field(
-        default_factory=lambda: ["aliyun", "doubao", "siliconflow", "groq"],
+        default_factory=lambda: list(_DEFAULT_AUTO_ORDER),
     )
     providers: Dict[str, ProviderConfig] = field(default_factory=dict)
 
@@ -339,11 +356,97 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             ),
             models=models,
         )
+    if name in ("stepfun", "step"):
+        env_models = _first_env("STEPFUN_ASR_MODELS", "STEP_ASR_MODELS")
+        env_model = _first_env("STEPFUN_ASR_MODEL", "STEP_ASR_MODEL")
+        models = _normalize_models(
+            models=env_models or None,
+            model=env_model or None,
+        ) or yaml_models or ["stepaudio-2.5-asr"]
+        return ProviderConfig(
+            name="stepfun",
+            api_key=_first_env(
+                "STEPFUN_API_KEY", "STEP_API_KEY",
+                default=str(raw.get("api_key") or "").strip(),
+            ),
+            base_url=_first_env(
+                "STEPFUN_BASE_URL", "STEP_BASE_URL",
+                default=str(
+                    raw.get("base_url") or "https://api.stepfun.com/v1"
+                ).strip(),
+            ),
+            proxy=normalize_proxy(_first_env(
+                "STEPFUN_PROXY", "STEP_PROXY",
+                default=str(raw.get("proxy") or "").strip(),
+            )),
+            timeout=_float_env(
+                "STEPFUN_TIMEOUT", "STEP_TIMEOUT", default=default_timeout,
+            ),
+            models=models,
+        )
+    if name in ("tencent", "tencentcloud", "qcloud"):
+        env_models = _first_env("TENCENT_ASR_MODELS", "QCLOUD_ASR_MODELS")
+        env_model = _first_env("TENCENT_ASR_MODEL", "QCLOUD_ASR_MODEL")
+        models = _normalize_models(
+            models=env_models or None,
+            model=env_model or None,
+        ) or yaml_models or ["16k_zh_en"]
+        return ProviderConfig(
+            name="tencent",
+            secret_id=_first_env(
+                "TENCENT_SECRET_ID", "QCLOUD_SECRET_ID",
+                default=str(
+                    raw.get("secret_id") or raw.get("secretId") or ""
+                ).strip(),
+            ),
+            secret_key=_first_env(
+                "TENCENT_SECRET_KEY", "QCLOUD_SECRET_KEY",
+                default=str(
+                    raw.get("secret_key") or raw.get("secretKey") or ""
+                ).strip(),
+            ),
+            app_id=_first_env(
+                "TENCENT_APP_ID", "QCLOUD_APP_ID",
+                default=str(raw.get("app_id") or raw.get("appid") or "").strip(),
+            ),
+            timeout=_float_env(
+                "TENCENT_TIMEOUT", "QCLOUD_TIMEOUT", default=default_timeout,
+            ),
+            models=models,
+        )
+    if name == "baidu":
+        env_models = _first_env("BAIDU_ASR_MODELS")
+        env_model = _first_env("BAIDU_ASR_MODEL")
+        models = _normalize_models(
+            models=env_models or None,
+            model=env_model or None,
+        ) or yaml_models or ["1537"]
+        return ProviderConfig(
+            name="baidu",
+            api_key=_first_env(
+                "BAIDU_API_KEY", "BAIDU_AK",
+                default=str(raw.get("api_key") or raw.get("apiKey") or "").strip(),
+            ),
+            secret_key=_first_env(
+                "BAIDU_SECRET_KEY", "BAIDU_SK",
+                default=str(
+                    raw.get("secret_key") or raw.get("secretKey") or ""
+                ).strip(),
+            ),
+            app_id=_first_env(
+                "BAIDU_APP_ID",
+                default=str(raw.get("app_id") or raw.get("appId") or "").strip(),
+            ),
+            timeout=_float_env("BAIDU_TIMEOUT", default=default_timeout),
+            models=models,
+        )
     return ProviderConfig(
         name=name,
         api_key=str(raw.get("api_key") or "").strip(),
         workspace_id=str(raw.get("workspace_id") or "").strip(),
         app_id=str(raw.get("app_id") or raw.get("app_key") or "").strip(),
+        secret_id=str(raw.get("secret_id") or "").strip(),
+        secret_key=str(raw.get("secret_key") or "").strip(),
         base_url=str(raw.get("base_url") or "").strip(),
         proxy=normalize_proxy(str(raw.get("proxy") or "").strip()),
         timeout=default_timeout,
@@ -352,7 +455,7 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
 
 
 def canonical_provider_name(name: str) -> str:
-    """历史别名归一：grok → groq；volcengine/volc → doubao；silicon/sf → siliconflow。"""
+    """历史别名归一：grok → groq；volcengine/volc → doubao；silicon/sf → siliconflow 等。"""
     n = (name or "").strip().lower()
     if n == "grok":
         return "groq"
@@ -360,6 +463,10 @@ def canonical_provider_name(name: str) -> str:
         return "doubao"
     if n in ("silicon", "sf"):
         return "siliconflow"
+    if n in ("step",):
+        return "stepfun"
+    if n in ("tencentcloud", "qcloud"):
+        return "tencent"
     return n
 
 
@@ -393,20 +500,30 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
                 providers_raw = dict(providers_raw)
                 providers_raw["siliconflow"] = providers_raw.pop(alias)
                 break
+    if "stepfun" not in providers_raw and "step" in providers_raw:
+        providers_raw = dict(providers_raw)
+        providers_raw["stepfun"] = providers_raw.pop("step")
+    if "tencent" not in providers_raw:
+        for alias in ("tencentcloud", "qcloud"):
+            if alias in providers_raw:
+                providers_raw = dict(providers_raw)
+                providers_raw["tencent"] = providers_raw.pop(alias)
+                break
 
     providers: Dict[str, ProviderConfig] = {}
-    for name in ("aliyun", "groq", "doubao", "siliconflow"):
+    for name in (
+        "aliyun", "groq", "doubao", "siliconflow",
+        "stepfun", "tencent", "baidu",
+    ):
         providers[name] = _merge_provider(name, providers_raw.get(name) or {})
     for name, raw in providers_raw.items():
         canon = canonical_provider_name(name)
         if canon not in providers:
             providers[canon] = _merge_provider(canon, raw or {})
 
-    auto_order_raw = data.get("auto_order") or [
-        "aliyun", "doubao", "siliconflow", "groq",
-    ]
+    auto_order_raw = data.get("auto_order") or list(_DEFAULT_AUTO_ORDER)
     if not isinstance(auto_order_raw, list):
-        auto_order_raw = ["aliyun", "doubao", "siliconflow", "groq"]
+        auto_order_raw = list(_DEFAULT_AUTO_ORDER)
     auto_order = [canonical_provider_name(str(x)) for x in auto_order_raw]
     # 去重保序
     seen = set()

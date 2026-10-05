@@ -16,6 +16,9 @@
 | Groq Whisper | ✅ 已实现 | `api_key` 非空；国内通常还需 `proxy` |
 | 豆包语音（火山）1.0 / 2.0 | ✅ 已实现 | `api_key` 非空；旧版控制台还需 `app_id` |
 | 硅基流动 SenseVoice | ✅ 已实现 | `api_key` 非空（国内直连） |
+| 阶跃星辰 StepFun | ✅ 已实现 | `api_key` 非空 |
+| 腾讯云 ASR 极速版 | ✅ 已实现 | `secret_id` + `secret_key`（另需 `app_id`）；模型 `16k_zh_en` |
+| 百度智能云短语音 | ✅ 已实现 | `api_key` + `secret_key`（另需 `app_id`）；`1537` / `80001` |
 
 失败时接口返回 **真实 HTTP 错误码**（如 400/502），不再用 200 + 空文本糊弄客户端。
 
@@ -173,8 +176,8 @@ python main.py
 ### 模型档案与扩展
 
 策略依赖的「费用 / 速度等级 / 准确度等级 / 硬上限」都登记在 `asr_proxy/strategy/metadata.py`
-（数据源自 `docs/asr_models_guide.md`，2026-10）。已收录现有 4 家平台全部在用模型，
-以及文档中拟新增的阶跃 / 腾讯 / 百度模型——对应服务商接入并启用后自动参与路由。
+（数据源自 `docs/asr_models_guide.md`，2026-10）。已收录阿里 / 豆包 / 硅基 / Groq /
+阶跃 / 腾讯极速版 / 百度等已接入模型；对应服务商密钥完备后自动参与路由。
 
 新增一个策略：继承 `asr_proxy/strategy/base.py` 的 `RoutingStrategy` 实现 `rank()`，
 并在 `asr_proxy/strategy/__init__.py` 的 `_REGISTRY` 注册策略名即可。

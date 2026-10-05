@@ -1,8 +1,8 @@
 # =============================================================================
 # ASR → OpenAI / 闪电说 代理 — 示例配置
 # =============================================================================
-# 用法：复制本文件为 config.yaml，填写各平台 api_key（或用环境变量覆盖）。
-# 规则：某服务商的 api_key 非空 → 启用该服务商；未启用不会被路由调用。
+# 用法：复制本文件为 config.yaml，填写各平台密钥（或用环境变量覆盖）。
+# 规则：服务商密钥完备 → 启用；腾讯需 secret_id+secret_key，百度需 api_key+secret_key，其余看 api_key。
 # 选型与比价详见：docs/asr_models_guide.md
 # =============================================================================
 
@@ -38,6 +38,9 @@ auto_order:
   - doubao
   - siliconflow
   - groq
+  - stepfun
+  - tencent
+  - baidu
 
 providers:
 
@@ -160,12 +163,10 @@ providers:
       - whisper-large-v3-turbo
 
   # ---------------------------------------------------------------------------
-  # 以下为文档拟新增平台（档案已登记，服务商代码尚未接入）
-  # 接入并启用后会自动进入 strategy-* 候选池；当前填写也不会生效。
-  # 详见 docs/asr_models_guide.md 第四部分。
+  # 阶跃 / 腾讯极速版 / 百度（已接入；密钥完备即参与路由）
   # ---------------------------------------------------------------------------
 
-  # 阶跃星辰 StepFun — 性价比主力（拟接入）
+  # 阶跃星辰 StepFun — 性价比主力
   # 开放平台：https://platform.stepfun.com/
   # 定价：    https://platform.stepfun.com/docs/zh/guides/pricing/details
   # 接口：POST /v1/audio/transcriptions（OpenAI 风格），Bearer 单一密钥
@@ -177,30 +178,27 @@ providers:
   #   models:
   #     - stepaudio-2.5-asr
 
-  # 腾讯云 ASR — 极速版(S1) / 大模型2.0 异步(S5)（拟接入）
+  # 腾讯云 ASR — 录音文件识别极速版（同步 Flash，本地上传）
   # 产品：https://cloud.tencent.com/product/asr
-  # 控制台：https://console.cloud.tencent.com/asr
-  # 计费：https://cloud.tencent.com/document/product/1093/35686
+  # 极速版 API：https://cloud.tencent.com/document/product/1093/52097
   # CAM 密钥：https://console.cloud.tencent.com/cam/capi
-  # 鉴权：TC3-HMAC-SHA256（SecretId / SecretKey / AppID）
-  # 免费（每月）：录音文件极速版 5h、录音文件 10h 等（以控制台为准）
-  # 硬限：极速版 16k_zh_en → t>2h 或文件>100MB 会被策略排除
-  # 计费粒度：按时长产品最低 1 秒
+  # 鉴权：Flash HMAC-SHA1（SecretId / SecretKey / AppID）
+  # 硬限：16k_zh_en → t>2h 或文件>100MB 会被策略排除
+  # 说明：大模型 2.0 异步需公网 URL，本轮未接入
   # tencent:
   #   secret_id: ""
   #   secret_key: ""
   #   app_id: ""
   #   models:
   #     - 16k_zh_en        # 录音文件识别极速版（同步，S1）
-  #     - 16k_zh_en_2.0    # 录音文件·大模型 2.0（异步，S5，0.8 元/时）
 
-  # 百度智能云 短语音（拟接入）
+  # 百度智能云 短语音
   # 首页：https://cloud.baidu.com/product/speech.html
   # 控制台：https://console.bce.baidu.com/ai-engine/speech/overview/index
   # 短语音文档：https://cloud.baidu.com/doc/SPEECH/s/Jlbxdezuf
   # 鉴权：AppID / API Key / Secret Key → OAuth access_token（约 30 天）
-  # 免费：标准版(1537)约 200 万次；极速版(80001) 5 万次（长期有效）
   # 硬限：单次 ≤60 秒；超限会被 strategy-* 排除
+  # 注意：80001 须在控制台开通极速版权限，否则识别失败并 failover
   # baidu:
   #   app_id: ""
   #   api_key: ""
