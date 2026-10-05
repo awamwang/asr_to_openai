@@ -2,6 +2,7 @@
 """服务商注册与 auto 路由。"""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,6 +22,13 @@ from asr_proxy.strategy import (
     build_strategy,
     parse_request_strategy,
 )
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    """耗时展示：<10ms 用 ms，否则保留两位秒。"""
+    if seconds < 0.01:
+        return f"{max(seconds, 0.0) * 1000:.0f}ms"
+    return f"{seconds:.2f}s"
 
 _FACTORY = {
     "aliyun": AliyunProvider,
@@ -291,7 +299,7 @@ class ProviderRouter:
                 "debug",
             )
         candidates = self.resolve(model, duration=duration, file_size=file_size)
-        chain = [c.label for c in candidates]
+        pool = [c.label for c in candidates]
         if not candidates:
             msg = (
                 f"没有可用的 ASR 服务商（model={model!r}）。"
@@ -302,22 +310,27 @@ class ProviderRouter:
             )
             self._log(
                 f"[recognize] 识别失败 请求模型={model!r} 模式={route_mode} "
-                f"候选链=[] 失败链=['无可用候选']",
+                f"切换链=[] 原因=无可用候选",
                 "error",
             )
             raise RuntimeError(msg)
 
-        # INFO：完整候选链；DEBUG：再逐步记录每次尝试
+        # 候选池仅 debug 弱展示；INFO 突出实际切换链与耗时
         self._log(
-            f"[recognize] 请求模型={model!r} 模式={route_mode} 候选链={chain}",
-            "info",
+            f"[recognize] 请求模型={model!r} 模式={route_mode} "
+            f"候选池({len(pool)})={pool}",
+            "debug",
         )
 
         errors: List[str] = []
+        # 实际切换步骤，如 "groq/x(失败 0.30s: Timeout)" / "aliyun/y(成功 1.20s)"
+        switch_steps: List[str] = []
         last_exc: Optional[BaseException] = None
         total = len(candidates)
+        t_all = time.perf_counter()
         for i, c in enumerate(candidates, 1):
             self._log(f"[recognize] 尝试[{i}/{total}] {c.label}", "debug")
+            t0 = time.perf_counter()
             try:
                 result = c.provider.recognize(
                     audio_bytes,
@@ -325,43 +338,54 @@ class ProviderRouter:
                     model=c.model,
                     language=language,
                 )
+                elapsed = time.perf_counter() - t0
+                cost = _fmt_elapsed(elapsed)
                 if result and result.text:
                     used_model = result.model or c.model
                     result.provider = result.provider or c.provider.name
                     result.model = used_model
                     used = f"{result.provider}/{used_model}"
                     self.remember_success(c.provider.name, used_model)
+                    switch_steps.append(f"{used}(成功 {cost})")
+                    total_cost = _fmt_elapsed(time.perf_counter() - t_all)
                     self._log(
-                        f"[recognize] 尝试[{i}/{total}] {c.label} → 成功",
+                        f"[recognize] 尝试[{i}/{total}] {c.label} → 成功 {cost}",
                         "debug",
                     )
                     self._log(
-                        f"[recognize] 选用={used} 请求模型={model!r} "
-                        f"模式={route_mode} 失败链={errors or '无'} "
-                        f"候选链={chain}",
+                        f"[recognize] 切换链: {' → '.join(switch_steps)} | "
+                        f"选用={used} 耗时={cost} 总耗时={total_cost} "
+                        f"请求模型={model!r} 模式={route_mode}",
                         "info",
                     )
                     return result, errors
                 err = f"{c.label}: 返回空文本"
                 errors.append(err)
+                switch_steps.append(f"{c.label}(失败 {cost}: 返回空文本)")
                 self._log(
-                    f"[recognize] 尝试[{i}/{total}] {c.label} → 失败: 返回空文本",
+                    f"[recognize] 尝试[{i}/{total}] {c.label} → 失败 {cost}: 返回空文本",
                     "debug",
                 )
             except Exception as e:
+                elapsed = time.perf_counter() - t0
+                cost = _fmt_elapsed(elapsed)
                 last_exc = e
-                err = f"{c.label}: {type(e).__name__}: {e}"
+                reason = f"{type(e).__name__}: {e}"
+                err = f"{c.label}: {reason}"
                 errors.append(err)
+                # 切换链摘要里截断过长原因，完整原因在 debug / errors
+                short = reason if len(reason) <= 120 else reason[:117] + "..."
+                switch_steps.append(f"{c.label}(失败 {cost}: {short})")
                 self._log(
-                    f"[recognize] 尝试[{i}/{total}] {c.label} → 失败: "
-                    f"{type(e).__name__}: {e}",
+                    f"[recognize] 尝试[{i}/{total}] {c.label} → 失败 {cost}: {reason}",
                     "debug",
                 )
                 continue
 
+        total_cost = _fmt_elapsed(time.perf_counter() - t_all)
         self._log(
-            f"[recognize] 全部失败 请求模型={model!r} 模式={route_mode} "
-            f"失败链={errors or '无'} 候选链={chain}",
+            f"[recognize] 全部失败 切换链: {' → '.join(switch_steps) or '[]'} | "
+            f"总耗时={total_cost} 请求模型={model!r} 模式={route_mode}",
             "error",
         )
         detail = "; ".join(errors) if errors else "unknown"

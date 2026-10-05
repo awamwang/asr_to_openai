@@ -340,12 +340,15 @@ class TestAutoFailover:
                 router.recognize(wav_bytes, model="auto")
 
         joined = "\n".join(logs)
+        assert "切换链:" in joined
         assert "选用=aliyun/" in joined
-        assert "候选链=" in joined
-        assert "失败链=" in joined
+        assert "耗时=" in joined
+        assert "总耗时=" in joined
         assert "模式=auto" in joined
-        assert any("groq" in line for line in logs if "失败链=" in line)
+        assert "groq/" in joined  # 失败后切到 aliyun，链上应有 groq
         assert any("尝试[" in line for line in logs)
+        # 候选池弱展示：仅 debug
+        assert any("候选池(" in line for line in logs)
 
     def test_router_logs_strategy_chain(self, cfg_both_enabled, wav_bytes):
         logs: list[str] = []
@@ -363,8 +366,9 @@ class TestAutoFailover:
 
         joined = "\n".join(logs)
         assert "模式=strategy-free" in joined
-        assert "候选链=" in joined
+        assert "切换链:" in joined
         assert "选用=aliyun/" in joined or "选用=" in joined
+        assert "耗时=" in joined
 
     def test_explicit_provider_slash_model(self, cfg_both_enabled, wav_bytes):
         router = ProviderRouter(cfg_both_enabled)

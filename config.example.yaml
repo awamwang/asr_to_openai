@@ -12,7 +12,8 @@ server:
   # 环境变量：ASR_PORT
   log_file: "asr_proxy.log"
   # 环境变量：ASR_LOG
-  # debug | info | warning | error（debug 含逐步尝试链）
+  # debug | info | warning | error
+  # info：切换链（尝试模型/成败/耗时）+ 最终选用；debug：另含候选池与逐步细节
   log_level: "info"
   # 环境变量：ASR_LOG_LEVEL
   # 按天滚动，最多保留天数（历史：asr_proxy.log.YYYY-MM-DD）
