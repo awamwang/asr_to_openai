@@ -11,7 +11,7 @@ ASR → OpenAI / 闪电说兼容代理 — 主入口
   3. python main.py
   4. 闪电说面板：
        地址：http://127.0.0.1:8004
-       模型：auto  （或 qwen-audio-3.1-asr-flash-streaming / aliyun）
+       模型：auto  （或 strategy-cost / strategy-free / aliyun/qwen-audio-3.1-asr-flash-streaming）
 """
 from __future__ import annotations
 
@@ -35,6 +35,7 @@ def main() -> None:
     print(f"[asr_proxy] host={cfg.host}:{cfg.port}")
     print(f"[asr_proxy] enabled providers: {enabled or '(none)'}")
     print(f"[asr_proxy] auto_order: {cfg.auto_order}")
+    print(f"[asr_proxy] strategy models: strategy-cost/speed/accuracy/free (request as model ID)")
     print(f"[asr_proxy] log: {cfg.log_file}")
     if not enabled:
         print("[asr_proxy] 警告：未启用任何服务商，请在 config.yaml 或环境变量中填写 api_key")

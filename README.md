@@ -7,6 +7,7 @@
 - **模型命名**：`服务商/模型`，例如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`groq/whisper-large-v3`
 - **`auto`**：只在服务商之间切换（每家用其优先模型），出错则试下一个；成功后下次优先从该服务商开始
 - **`服务商/auto`**（如 `aliyun/auto`、`groq/auto`）：只在该服务商的模型列表内切换；成功后下次优先从该模型开始
+- **策略模型 ID**（见「三、路由策略」）：`strategy-cost` / `strategy-speed` / `strategy-accuracy` / `strategy-free` / `strategy-free+speed` / `strategy-free+accuracy`；**不覆盖** `auto` 与显式 `服务商/模型`
 
 当前能力：
 | 服务商 | 状态 | 启用条件 |
@@ -101,7 +102,7 @@ providers:
 | Groq | `GROQ_API_KEY`，`GROQ_BASE_URL`，`GROQ_PROXY`，`GROQ_TIMEOUT`，`GROQ_ASR_MODELS` / `GROQ_DEFAULT_MODEL` |
 | 豆包 | `DOUBAO_API_KEY` / `VOLC_API_KEY`，`DOUBAO_APP_ID` / `VOLC_APP_ID`，`DOUBAO_WS_URL`，`DOUBAO_ASR_MODELS` |
 | 硅基流动 | `SILICONFLOW_API_KEY` / `SF_API_KEY`，`SILICONFLOW_BASE_URL`，`SILICONFLOW_ASR_MODELS` |
-| 通用 | `ASR_PORT`，`ASR_LOG`，`FFMPEG_PATH` |
+| 通用 | `ASR_PORT`，`ASR_LOG`，`FFMPEG_PATH`，`ASR_STRATEGY` |
 
 ### 3. 启动
 
@@ -135,20 +136,66 @@ python main.py
 
 ---
 
-## 三、接口清单
+## 三、路由策略
+
+策略以**请求模型 ID**选择，不改写 `auto`。详见 `docs/asr_models_guide.md`。
+
+| model ID | 含义 | 行为 |
+|---|---|---|
+| `auto`（默认） | 服务商容灾切换 | 按 `auto_order` + 上次成功优先 |
+| `strategy-cost` | 费用优先 | 只比较刊例付费价（按次 vs 秒×时长）；免费额度不占优 |
+| `strategy-speed` | 速度优先 | 按模型速度等级 S1→S5（静态等级，未实测） |
+| `strategy-accuracy` | 准确度优先 | 按静态准确度等级（未实测） |
+| `strategy-free` | 免费策略 | 只在长期免费/带额度的模型中，保持配置顺序 |
+| `strategy-free+speed` / `strategy-free+accuracy` | 组合 | 先限定免费候选，再按速度或准确度 |
+
+切换示例（闪电说 / OpenAI 兼容请求的 `model` 字段）：
+
+```yaml
+# 不要用 config.strategy 去劫持 auto
+# 请求里填：
+#   model: strategy-cost
+#   model: strategy-free
+#   model: strategy-free+speed
+```
+
+### 费用优先（cost）规则
+
+1. 识别前先探测音频时长（WAV 解析头部；非 WAV 用 ffprobe；失败则不做时长过滤）；
+2. 无刊例价的长期免费模型（如硅基 SenseVoice）**不进入**本策略；
+3. 付费模型按本次时长 t 预估刊例费用：`按次价 P` vs `秒单价 S × max(t, 最短计费时长)`，取低者；免费额度不算成本 0；
+4. 硬上限排除：如百度短语音 60s；
+5. 非人民币刊例（Groq USD）不混比；未知计费排最后。
+
+> 免费走独立模型 ID `strategy-free`。额度余量能查则查，查不到则调用失败后试下一个；
+> 无法感知则视为仍免费。
+
+### 模型档案与扩展
+
+策略依赖的「费用 / 速度等级 / 准确度等级 / 硬上限」都登记在 `asr_proxy/strategy/metadata.py`
+（数据源自 `docs/asr_models_guide.md`，2026-10）。已收录现有 4 家平台全部在用模型，
+以及文档中拟新增的阶跃 / 腾讯 / 百度模型——对应服务商接入并启用后自动参与路由。
+
+新增一个策略：继承 `asr_proxy/strategy/base.py` 的 `RoutingStrategy` 实现 `rank()`，
+并在 `asr_proxy/strategy/__init__.py` 的 `_REGISTRY` 注册策略名即可。
+`recommended` 即预留了这样的口子。
+
+---
+
+## 四、接口清单
 
 - `GET /health`：查看已启用服务商、模型列表、上次成功记录
-- `GET /v1/models`：列出 `auto`、`服务商/auto` 及全部 `服务商/模型`
+- `GET /v1/models`：列出 `auto`、策略 ID、`服务商/auto` 及全部 `服务商/模型`
 - `POST /chat/completions`（`/v1/...`）：闪电说主路径，JSON base64 音频 → `choices[0].message.content`
 - `POST /audio/transcriptions`（`/v1/...`）：标准 multipart 兼容，返回 verbose_json
 
 ---
 
-## 四、测试
+## 五、测试
 
 ```powershell
 # 基础单测（mock，不需要真实 Key）
-pytest tests/test_basic.py -q
+pytest tests/test_basic.py tests/test_strategy.py -q
 
 # 含真实阿里云识别（需已配置 DASHSCOPE_API_KEY）
 pytest tests/test_basic.py -q -m integration
@@ -166,13 +213,13 @@ print(requests.post('http://127.0.0.1:8004/chat/completions',json=body,timeout=9
 
 ---
 
-## 五、旧脚本
+## 六、旧脚本
 
 `dashscope_asr_proxy.py` 为早期单文件阿里云代理，仍可单独运行；新功能请用 `main.py`。
 
 ---
 
-## 六、踩坑摘要
+## 七、踩坑摘要
 
 1. 闪电走 `/chat/completions` + JSON base64，不是 Whisper 的 multipart。
 2. 必须把文本放进 `choices[0].message.content`，否则报「未返回有效文本」。

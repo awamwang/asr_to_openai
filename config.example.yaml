@@ -11,6 +11,12 @@ server:
 ffmpeg_path: "ffmpeg"
 # 可用环境变量 FFMPEG_PATH 覆盖
 
+# 兼容字段：不再改写 auto。费用/速度/准确度/免费请在请求里填模型 ID：
+# strategy-cost / strategy-speed / strategy-accuracy / strategy-free
+# strategy-free+speed / strategy-free+accuracy
+# 环境变量 ASR_STRATEGY 仍可写入该字段，但不覆盖 auto 请求。
+strategy: auto
+
 # auto：只在服务商之间切换；出错则试下一个。成功后下次优先从该服务商开始。
 auto_order:
   - aliyun

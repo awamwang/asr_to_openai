@@ -104,6 +104,8 @@ class AppConfig:
     port: int = 8004
     log_file: str = "asr_proxy.log"
     ffmpeg_path: str = "ffmpeg"
+    # 兼容字段：不再改写 auto。真正策略请请求模型 ID strategy-cost 等。
+    strategy: str = "auto"
     auto_order: List[str] = field(
         default_factory=lambda: ["aliyun", "doubao", "siliconflow", "groq"],
     )
@@ -413,11 +415,28 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
     port_env = _env("ASR_PORT") or _env("DASHSCOPE_PORT")
     log_env = _env("ASR_LOG") or _env("DASHSCOPE_LOG")
 
+    # 路由策略字段仅作兼容记录，不再改写 auto。
+    # 局部导入避免 config → strategy → providers.base → config 的循环依赖。
+    from asr_proxy.strategy import STRATEGY_NAMES, normalize_strategy_id
+
+    strategy_raw = (str(_env("ASR_STRATEGY") or data.get("strategy") or "auto")).strip().lower()
+    strategy_norm = normalize_strategy_id(strategy_raw)
+    if strategy_raw in ("", "auto"):
+        strategy = "auto"
+    elif strategy_norm is None:
+        raise ValueError(
+            f"未知 strategy={strategy_raw!r}，可选：{', '.join(STRATEGY_NAMES)}，"
+            "或组合 free+speed / free+accuracy。"
+        )
+    else:
+        strategy = strategy_norm
+
     return AppConfig(
         host=str(server.get("host") or "127.0.0.1"),
         port=int(port_env or server.get("port") or 8004),
         log_file=log_env or str(server.get("log_file") or "asr_proxy.log"),
         ffmpeg_path=_first_env("FFMPEG_PATH", default=str(data.get("ffmpeg_path") or "ffmpeg")),
+        strategy=strategy,
         auto_order=auto_order,
         providers=providers,
     )

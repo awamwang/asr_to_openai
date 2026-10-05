@@ -5,12 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
+from asr_proxy.audio import probe_audio_duration
 from asr_proxy.config import AppConfig, canonical_provider_name
 from asr_proxy.providers.aliyun import AliyunProvider
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.providers.doubao import DoubaoProvider
 from asr_proxy.providers.groq import GroqProvider
 from asr_proxy.providers.siliconflow import SiliconFlowProvider
+from asr_proxy.strategy import (
+    STRATEGY_PUBLIC_IDS,
+    build_strategy,
+    parse_request_strategy,
+)
 
 _FACTORY = {
     "aliyun": AliyunProvider,
@@ -54,7 +60,7 @@ def _rotate_from(items: List[str], start: Optional[str]) -> List[str]:
 
 
 class ProviderRouter:
-    """按 model 选择服务商/模型；支持 auto 与 服务商/auto 容错切换。"""
+    """按 model 选择服务商/模型；策略以独立模型 ID 请求，不覆盖 auto。"""
 
     def __init__(
         self,
@@ -65,6 +71,8 @@ class ProviderRouter:
         self.cfg = cfg
         self.providers = providers or build_providers(cfg)
         self._log_fn = log_fn
+        # 配置里的 strategy 仅作兼容记录；真正策略由请求 model ID 决定
+        self.strategy_name = (cfg.strategy or "auto").strip().lower()
         # 上次成功的服务商；下次 auto 默认从此开始
         self._last_provider: Optional[str] = None
         # 各服务商上次成功的模型；下次 auto / 服务商/auto 默认从此开始
@@ -128,10 +136,32 @@ class ProviderRouter:
             None,
         )
 
-    def resolve(self, model: str) -> List[RouteCandidate]:
-        """解析请求 model，返回按优先级排列的候选列表。"""
+    def _strategy_for_request(self, model: str):
+        """请求若为策略模型 ID 则构建对应策略，否则 None（走 auto / 显式模型）。"""
+        spec = parse_request_strategy(model)
+        if spec is None:
+            return None
+        return build_strategy(spec)
+
+    def resolve(
+        self,
+        model: str,
+        duration: Optional[float] = None,
+        file_size: Optional[int] = None,
+    ) -> List[RouteCandidate]:
+        """解析请求 model，返回按优先级排列的候选列表。
+
+        duration：音频时长（秒）；file_size：字节数。策略硬限/比价需要；
+        auto 与显式模型可省略。探测失败则不做对应过滤。
+        """
         raw = (model or "").strip()
         m = raw.lower()
+        strategy = self._strategy_for_request(raw)
+        if strategy is not None:
+            return self._resolve_strategy_pool(
+                self.enabled_list(), duration, strategy, file_size,
+            )
+
         if not m or m == "auto":
             return self._resolve_global_auto()
 
@@ -180,6 +210,29 @@ class ProviderRouter:
             for n in ordered_names
         ]
 
+    def _resolve_strategy_pool(
+        self,
+        providers: List[AsrProvider],
+        duration: Optional[float],
+        strategy,
+        file_size: Optional[int] = None,
+    ) -> List[RouteCandidate]:
+        """策略路由：在「服务商 × 配置模型」候选池上按策略排序（稳定）。"""
+        pool: List[Tuple[AsrProvider, str]] = []
+        for p in providers:
+            models = p.model_names or [p.default_model]
+            for m in models:
+                if (p, m) not in pool:
+                    pool.append((p, m))
+        if not pool:
+            return []
+        try:
+            ordered = strategy.rank(pool, duration, file_size)
+        except NotImplementedError as e:
+            self._log(f"[resolve] 策略不可用: {e}")
+            raise
+        return [RouteCandidate(provider=p, model=m) for p, m in ordered]
+
     def recognize(
         self,
         audio_bytes: bytes,
@@ -188,12 +241,25 @@ class ProviderRouter:
         language: Optional[str] = None,
     ) -> Tuple[AsrResult, List[str]]:
         """识别音频。返回 (结果, 失败记录列表)。全部失败则抛出最后一个异常。"""
-        candidates = self.resolve(model)
+        # 策略模型 ID 需要音频时长做硬限/刊例比价；只需探测一次。
+        # 文件体积直接取字节数，用于 Groq 25MB / 腾讯极速版 100MB 硬限。
+        duration: Optional[float] = None
+        file_size: Optional[int] = len(audio_bytes) if audio_bytes else None
+        req_strategy = self._strategy_for_request(model)
+        if req_strategy is not None and req_strategy.needs_duration:
+            duration = probe_audio_duration(audio_bytes, self.cfg.ffmpeg_path)
+            self._log(
+                f"[recognize] 策略={req_strategy.name} "
+                f"音频时长={duration if duration is not None else '未知'} "
+                f"字节={file_size if file_size is not None else '未知'}"
+            )
+        candidates = self.resolve(model, duration=duration, file_size=file_size)
         if not candidates:
             msg = (
                 f"没有可用的 ASR 服务商（model={model!r}）。"
                 "请在 config.yaml 或环境变量中配置至少一个 api_key；"
-                "闪电说模型请填 groq/... / aliyun/... / doubao/... / siliconflow/... 或 auto。"
+                "闪电说模型请填 groq/... / aliyun/... / doubao/... / siliconflow/... / auto，"
+                f"或策略 ID {', '.join(STRATEGY_PUBLIC_IDS)}。"
             )
             self._log(f"[recognize] 识别失败 请求模型={model!r} 跳过=['无可用候选']")
             raise RuntimeError(msg)

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from asr_proxy.config import AppConfig, load_config
 from asr_proxy.providers import ProviderRouter
+from asr_proxy.strategy import STRATEGY_PUBLIC_IDS
 
 
 def _ensure_log_path(path: str) -> str:
@@ -85,11 +86,14 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
             }
             for p in router.enabled_list()
         ]
-        model_ids = ["auto"]
+        model_ids = ["auto"] + list(STRATEGY_PUBLIC_IDS)
         for p in router.enabled_list():
             model_ids.extend(p.public_model_ids())
         return {
             "status": "ok",
+            "strategy": "auto",
+            "strategy_models": list(STRATEGY_PUBLIC_IDS),
+            "config_strategy": cfg.strategy,
             "enabled_providers": enabled,
             "auto_order": [p.name for p in router.enabled_list()],
             "models": model_ids,
@@ -104,6 +108,14 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
     async def list_models():
         models = [{"id": "auto", "object": "model", "owned_by": "asr-proxy"}]
         seen = {"auto"}
+        for sid in STRATEGY_PUBLIC_IDS:
+            if sid not in seen:
+                models.append({
+                    "id": sid,
+                    "object": "model",
+                    "owned_by": "asr-proxy",
+                })
+                seen.add(sid)
         for p in router.enabled_list():
             for mid in p.public_model_ids():
                 if mid not in seen:
@@ -220,7 +232,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         return _error_response(
             502,
             last_error or "recognition produced no text",
-            hint="检查模型名（groq/... / aliyun/... / doubao/... / siliconflow/... / auto）、api_key，以及 groq.proxy 是否可达",
+            hint="检查模型名（groq/... / aliyun/... / auto / strategy-cost / strategy-free）、api_key，以及 groq.proxy 是否可达",
         )
 
     return app
