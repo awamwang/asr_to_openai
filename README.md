@@ -24,7 +24,7 @@
 
 ---
 
-> 客户端对接（闪电说协议、实时 WS 与 Flash 差异、提供给其他软件时的检查清单）见 [docs/client_integration.md](docs/client_integration.md)。
+> 客户端对接（闪电说协议、实时 WS 与 Flash、FunASR/WhisperLive 定位、提供给其他软件时的检查清单）见 [docs/client_integration.md](docs/client_integration.md)。
 
 ## 一、闪电说真实协议（最重要）
 
