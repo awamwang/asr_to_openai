@@ -247,7 +247,17 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
         speed=2, accuracy=2,  # 速度等级推断
         cost=_per_sec(0.000333),
     ),
-    ("tencent", "16k_zh_en"): _p(  # 录音文件识别·极速版，S1 速度兜底
+    ("tencent", "16k_zh"): _p(  # 录音文件识别·极速版标准引擎，每月 5h 免费包
+        "tencent", "16k_zh",
+        speed=1, accuracy=3,
+        cost=_per_sec(  # 3.1 元/时起；最低计费 1 秒；硬限 2h / 100MB
+            0.000861, free_tier="quota",
+            min_bill_sec=1.0,
+            max_duration=_TENCENT_FLASH_MAX_SEC,
+            max_bytes=_TENCENT_FLASH_MAX_BYTES,
+        ),
+    ),
+    ("tencent", "16k_zh_en"): _p(  # 极速版大模型1.0（无月免费额度）
         "tencent", "16k_zh_en",
         speed=1, accuracy=3,
         cost=_per_sec(  # 3.1 元/时起；最低计费 1 秒；硬限 2h / 100MB

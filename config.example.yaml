@@ -53,10 +53,13 @@ auto_order:
 # 未配置或空列表 = 不限制；非空 = 白名单（未列入则该策略不使用）。
 # free 无自身排序，free_order 即为其默认顺序；cost/speed/accuracy 作过滤与同分底序。
 # free+speed / free+accuracy 使用 free_order。
-# free_order:
-#   - siliconflow
-#   - groq
-#   - aliyun
+free_order:
+  - tencent
+  - aliyun
+  - baidu
+  - doubao
+  - siliconflow
+  - groq
 # cost_order: []
 # speed_order: []
 # accuracy_order: []
