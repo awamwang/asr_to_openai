@@ -184,7 +184,7 @@ audio:
 
 # 文本出口
 text:
-  clean_punctuation: false   # 本地清洗停顿逗号/碎句号
+  clean_punctuation: false   # 主开关；false 时腾讯不过滤标点、豆包打标点
   smart_sentence: false      # true 时只保留阿里 streaming/realtime
 ```
 

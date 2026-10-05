@@ -127,7 +127,7 @@ audio:
   preprocess: true                # 识别前统一 16k 单声道
   trim_silence: true              # 裁首尾静音
 text:
-  clean_punctuation: false        # 本地清洗停顿逗号/碎句号
+  clean_punctuation: false        # 主开关：false 保留上游标点（含腾讯不过滤）
   smart_sentence: false           # true 时只保留阿里 streaming/realtime
 ```
 

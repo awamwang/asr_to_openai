@@ -85,8 +85,11 @@ class ProviderConfig:
     # 阿里云 VAD 静音阈值（ms），范围 [200, 6000]，默认 1300
     # 腾讯 Flash 复用：本地合并碎句的句间静音阈值
     max_sentence_silence: int = 1300
-    # 腾讯 Flash filter_punc：0不过滤 / 1句末 / 2全部（闪电说默认 2）
-    filter_punc: int = 2
+    # 腾讯 Flash filter_punc：0不过滤 / 1句末 / 2全部
+    # 有效值由全局 text.clean_punctuation 映射，不单独作为主开关
+    filter_punc: int = 0
+    # 豆包 enable_punc：是否让上游打标点（由全局 text.clean_punctuation 映射）
+    enable_punc: bool = True
 
     @property
     def enabled(self) -> bool:
@@ -150,7 +153,7 @@ class AppConfig:
     audio_preprocess: bool = True
     # 预处理时裁首尾静音（依赖 ffmpeg silenceremove）
     audio_trim_silence: bool = True
-    # 本地清洗停顿/碎句标点（总控）；默认 false，保留厂商原生标点
+    # 本地清洗停顿/碎句标点（主配置）；同时映射到各厂商上游标点参数
     clean_punctuation: bool = False
     # 智能断句：只保留原生支持语义断句的模型（见 supports_smart_sentence）
     smart_sentence: bool = False
@@ -237,12 +240,48 @@ def _clamp_sentence_silence(value: Any, default: int = 1300) -> int:
     return max(200, min(6000, n))
 
 
-def _clamp_filter_punc(value: Any, default: int = 2) -> int:
+def _clamp_filter_punc(value: Any, default: int = 0) -> int:
     try:
         n = int(value)
     except (TypeError, ValueError):
         n = default
     return max(0, min(2, n))
+
+
+def derive_provider_text_params(
+    clean_punctuation: bool,
+    smart_sentence: bool,
+) -> Dict[str, Dict[str, Any]]:
+    """全局 text.* / ASR_* 主配置 → 各厂商接口参数。
+
+    clean_punctuation=False（保留标点）：腾讯不过滤、豆包打标点。
+    clean_punctuation=True（清洗标点）：腾讯滤全部、豆包关上游标点。
+    smart_sentence=True：强制阿里流式 semantic_punctuation_enabled。
+    """
+    derived: Dict[str, Dict[str, Any]] = {
+        "tencent": {"filter_punc": 2 if clean_punctuation else 0},
+        "doubao": {"enable_punc": not clean_punctuation},
+    }
+    if smart_sentence:
+        derived["aliyun"] = {"semantic_punctuation_enabled": True}
+    return derived
+
+
+def apply_global_text_policy(
+    providers: Dict[str, ProviderConfig],
+    *,
+    clean_punctuation: bool,
+    smart_sentence: bool,
+) -> None:
+    """用全局主配置覆盖已加载的厂商细节项（YAML/厂商环境变量在此后不再独立生效）。"""
+    for name, fields in derive_provider_text_params(
+        clean_punctuation, smart_sentence,
+    ).items():
+        p = providers.get(name)
+        if not p:
+            continue
+        for attr, value in fields.items():
+            setattr(p, attr, value)
 
 
 def _int_env(*keys: str, default: int = 1300) -> int:
@@ -447,7 +486,8 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             if yaml_silence is not None
             else 2500
         )
-        yaml_filter_punc = _clamp_filter_punc(raw.get("filter_punc"), default=2)
+        # filter_punc 先占位，load_config 末尾由 text.clean_punctuation 覆盖
+        yaml_filter_punc = _clamp_filter_punc(raw.get("filter_punc"), default=0)
         env_filter = _first_env("TENCENT_FILTER_PUNC", "QCLOUD_FILTER_PUNC")
         filter_punc = (
             _clamp_filter_punc(env_filter, default=yaml_filter_punc)
@@ -702,9 +742,11 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
             default=False,
         ),
     )
-    # 开启智能断句时强制阿里流式走语义断句参数（否则过滤了模型却仍用 VAD）
-    if smart_sentence and "aliyun" in providers:
-        providers["aliyun"].semantic_punctuation_enabled = True
+    apply_global_text_policy(
+        providers,
+        clean_punctuation=clean_punctuation,
+        smart_sentence=smart_sentence,
+    )
 
     return AppConfig(
         host=str(server.get("host") or "127.0.0.1"),

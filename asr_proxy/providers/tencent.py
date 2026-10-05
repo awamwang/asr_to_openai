@@ -399,12 +399,12 @@ class TencentProvider(AsrProvider):
         secret_key: str,
     ) -> AsrResult:
         engine_type = used_model if used_model else DEFAULT_MODEL
-        # filter_punc: 0不过滤 1句末 2全部。闪电说默认 2，避免停顿逗号刷屏
-        filter_punc = getattr(self.config, "filter_punc", 2)
+        # filter_punc 由全局 text.clean_punctuation 映射：保留标点=0，清洗=2
+        filter_punc = getattr(self.config, "filter_punc", 0)
         try:
             filter_punc = max(0, min(2, int(filter_punc)))
         except (TypeError, ValueError):
-            filter_punc = 2
+            filter_punc = 0
         params = {
             "engine_type": engine_type,
             "extra_punc": 0,

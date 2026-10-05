@@ -76,9 +76,11 @@ audio:
   preprocess: true
   trim_silence: true
 
-# 文本出口（不改 free_order / auto_order）
+# 文本出口（主配置，映射到各厂商细节参数；不改 free_order / auto_order）
 text:
-  # 本地清洗停顿逗号/碎句号；默认 false=保留厂商原生标点
+  # 清洗停顿逗号/碎句号。false=保留上游标点；true=本地清洗，并映射：
+  #   tencent.filter_punc=2、doubao.enable_punc=false
+  # false 时映射：tencent.filter_punc=0、doubao.enable_punc=true
   clean_punctuation: false
   # 智能断句：只保留原生语义断句模型（会过滤腾讯 Flash / 豆包 / 硅基等）
   # 当前可用：aliyun *-streaming / *-realtime（如 qwen-audio-3.1-asr-flash-streaming）
@@ -248,7 +250,7 @@ providers:
   #     # 同包其他标准 Flash：16k_ja / 16k_ko / 16k_vi / …
   #     # - 16k_zh_en         # Flash 大模型1.0，无月免费额度
   #   max_sentence_silence: 2500   # 本地合并碎句（Flash 无 VAD 参数）
-  #   filter_punc: 2               # 0不过滤 / 1句末 / 2全部（闪电说建议 2）
+  #   # filter_punc 由 text.clean_punctuation 映射，勿单独当主开关
 
   # 百度智能云 短语音
   # 首页：https://cloud.baidu.com/product/speech.html

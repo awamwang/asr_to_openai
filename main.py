@@ -37,6 +37,13 @@ def main() -> None:
     print(f"[asr_proxy] auto_order: {cfg.auto_order}")
     print(f"[asr_proxy] strategy models: strategy-cost/speed/accuracy/free (request as model ID)")
     print(f"[asr_proxy] text: clean_punctuation={cfg.clean_punctuation} smart_sentence={cfg.smart_sentence}")
+    mapped = []
+    if "tencent" in cfg.providers:
+        mapped.append(f"tencent.filter_punc={cfg.providers['tencent'].filter_punc}")
+    if "doubao" in cfg.providers:
+        mapped.append(f"doubao.enable_punc={cfg.providers['doubao'].enable_punc}")
+    if mapped:
+        print(f"[asr_proxy] text→providers: {', '.join(mapped)}")
     print(f"[asr_proxy] log: {cfg.log_file} level={cfg.log_level} backup_days={cfg.log_backup_days}")
     if not enabled:
         print("[asr_proxy] 警告：未启用任何服务商，请在 config.yaml 或环境变量中填写 api_key")

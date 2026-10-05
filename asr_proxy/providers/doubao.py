@@ -365,7 +365,7 @@ class DoubaoProvider(AsrProvider):
                 "request": {
                     "model_name": MODEL_NAME,
                     "enable_itn": True,
-                    "enable_punc": True,
+                    "enable_punc": bool(getattr(self.config, "enable_punc", True)),
                     "enable_ddc": False,
                     "show_utterances": True,
                     "result_type": "full",

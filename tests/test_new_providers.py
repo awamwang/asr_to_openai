@@ -135,6 +135,28 @@ class TestTencentFlash:
         assert result.duration == pytest.approx(1.5)
         url = client.post.call_args.kwargs.get("url") or client.post.call_args[0][0]
         assert "extra_punc=0" in url
+        assert "filter_punc=0" in url
+
+    def test_flash_filter_punc_from_config(self):
+        client = MagicMock()
+        client.post.return_value = _mock_response(200, {
+            "code": 0,
+            "audio_duration": 1000,
+            "flash_result": [{"text": "你好", "channel_id": 0, "sentence_list": []}],
+        })
+        p = TencentProvider(
+            ProviderConfig(
+                name="tencent",
+                secret_id="SID",
+                secret_key="SKEY",
+                app_id="1255532176",
+                models=["16k_zh"],
+                filter_punc=2,
+            ),
+            client=client,
+        )
+        p.recognize(b"wavdata", filename="t.wav")
+        url = client.post.call_args.kwargs.get("url") or client.post.call_args[0][0]
         assert "filter_punc=2" in url
 
     def test_merge_short_pause_sentences(self):

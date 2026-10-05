@@ -60,6 +60,16 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         "text: clean_punctuation=%s smart_sentence=%s",
         cfg.clean_punctuation, cfg.smart_sentence,
     )
+    if "tencent" in cfg.providers:
+        logger.info(
+            "text→tencent.filter_punc=%s",
+            cfg.providers["tencent"].filter_punc,
+        )
+    if "doubao" in cfg.providers:
+        logger.info(
+            "text→doubao.enable_punc=%s",
+            cfg.providers["doubao"].enable_punc,
+        )
     if cfg.smart_sentence:
         smart = router.list_smart_sentence_models()
         if smart:

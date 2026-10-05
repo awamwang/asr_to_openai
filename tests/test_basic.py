@@ -176,6 +176,82 @@ class TestConfig:
         assert cfg.log_level == "info"
         assert cfg.log_backup_days == 7
 
+    def test_global_text_policy_maps_provider_params(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("ASR_CLEAN_PUNCTUATION", raising=False)
+        monkeypatch.delenv("ASR_SMART_SENTENCE", raising=False)
+        monkeypatch.delenv("TENCENT_FILTER_PUNC", raising=False)
+        p = tmp_path / "cfg.yaml"
+        p.write_text(
+            "text:\n"
+            "  clean_punctuation: false\n"
+            "providers:\n"
+            "  tencent:\n"
+            "    secret_id: a\n"
+            "    secret_key: b\n"
+            "    app_id: '1'\n"
+            "    filter_punc: 2\n"
+            "    models: [16k_zh]\n"
+            "  doubao:\n"
+            "    api_key: k\n"
+            "    models: [asr-2.0]\n"
+            "  aliyun:\n"
+            "    api_key: sk\n"
+            "    semantic_punctuation_enabled: false\n"
+            "    models: [qwen-audio-3.1-asr-flash-streaming]\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(p)
+        assert cfg.clean_punctuation is False
+        # 全局保留标点覆盖腾讯 YAML filter_punc: 2
+        assert cfg.providers["tencent"].filter_punc == 0
+        assert cfg.providers["doubao"].enable_punc is True
+        assert cfg.providers["aliyun"].semantic_punctuation_enabled is False
+
+        p.write_text(
+            "text:\n"
+            "  clean_punctuation: true\n"
+            "  smart_sentence: true\n"
+            "providers:\n"
+            "  tencent:\n"
+            "    secret_id: a\n"
+            "    secret_key: b\n"
+            "    app_id: '1'\n"
+            "    filter_punc: 0\n"
+            "    models: [16k_zh]\n"
+            "  doubao:\n"
+            "    api_key: k\n"
+            "    models: [asr-2.0]\n"
+            "  aliyun:\n"
+            "    api_key: sk\n"
+            "    semantic_punctuation_enabled: false\n"
+            "    models: [qwen-audio-3.1-asr-flash-streaming]\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(p)
+        assert cfg.clean_punctuation is True
+        assert cfg.providers["tencent"].filter_punc == 2
+        assert cfg.providers["doubao"].enable_punc is False
+        assert cfg.providers["aliyun"].semantic_punctuation_enabled is True
+
+    def test_env_clean_punctuation_overrides_yaml(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ASR_CLEAN_PUNCTUATION", "true")
+        monkeypatch.delenv("TENCENT_FILTER_PUNC", raising=False)
+        p = tmp_path / "cfg.yaml"
+        p.write_text(
+            "text:\n"
+            "  clean_punctuation: false\n"
+            "providers:\n"
+            "  tencent:\n"
+            "    secret_id: a\n"
+            "    secret_key: b\n"
+            "    app_id: '1'\n"
+            "    models: [16k_zh]\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(p)
+        assert cfg.clean_punctuation is True
+        assert cfg.providers["tencent"].filter_punc == 2
+
     def test_setup_logging_daily_rotation(self, tmp_path):
         from logging.handlers import TimedRotatingFileHandler
         from asr_proxy.logutil import LOGGER_NAME, setup_logging

@@ -207,7 +207,7 @@ Groq 为海外高质量备选（常需代理 `127.0.0.1:7881`），可进 `strat
 
 | 选项 | 默认 | 作用 |
 |---|---|---|
-| `clean_punctuation` | `false` | 本地清洗停顿逗号/碎句号的**总控**。`false`=保留厂商原生标点；`true`=路由出口再清一遍 |
+| `clean_punctuation` | `false` | **主配置**。`false`=保留上游标点，并映射 `tencent.filter_punc=0`、`doubao.enable_punc=true`；`true`=路由出口再清一遍，并映射腾讯滤全部、豆包关标点 |
 | `smart_sentence` | `false` | **智能断句**：只保留原生支持语义断句的模型，**会过滤**其余候选 |
 
 **`smart_sentence: true` 会留下的模型（当前实现）：**
