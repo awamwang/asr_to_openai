@@ -126,6 +126,12 @@ class AppConfig:
     auto_order: List[str] = field(
         default_factory=lambda: list(_DEFAULT_AUTO_ORDER),
     )
+    # 各策略专用服务商顺序；非空时为白名单（未列入则该策略不使用）。
+    # 对无自身排序的策略（如 free）同时作为默认尝试顺序。
+    free_order: List[str] = field(default_factory=list)
+    cost_order: List[str] = field(default_factory=list)
+    speed_order: List[str] = field(default_factory=list)
+    accuracy_order: List[str] = field(default_factory=list)
     providers: Dict[str, ProviderConfig] = field(default_factory=dict)
 
     def enabled_providers(self) -> List[ProviderConfig]:
@@ -143,6 +149,21 @@ class AppConfig:
                 result.append(p)
                 seen.add(name)
         return result
+
+    def order_for_strategy(self, strategy_name: str) -> List[str]:
+        """返回策略专用服务商顺序。
+
+        组合策略（如 free+speed）取前缀对应列表。
+        空列表表示未配置：不白名单限制，沿用 enabled / auto_order。
+        """
+        base = (strategy_name or "").split("+", 1)[0].strip().lower()
+        mapping = {
+            "free": self.free_order,
+            "cost": self.cost_order,
+            "speed": self.speed_order,
+            "accuracy": self.accuracy_order,
+        }
+        return list(mapping.get(base) or [])
 
 
 def _env(key: str, default: str = "") -> str:
@@ -470,6 +491,21 @@ def canonical_provider_name(name: str) -> str:
     return n
 
 
+def _parse_provider_order(
+    raw: Any,
+    *,
+    default: Optional[List[str]] = None,
+) -> List[str]:
+    """解析服务商顺序列表：规范化别名、去重保序。"""
+    if raw is None:
+        return list(default or [])
+    if not isinstance(raw, list):
+        return list(default or [])
+    names = [canonical_provider_name(str(x)) for x in raw]
+    seen = set()
+    return [x for x in names if x and not (x in seen or seen.add(x))]
+
+
 def load_config(path: Optional[str | Path] = None) -> AppConfig:
     """从 YAML 加载配置，再用环境变量覆盖。无 config.yaml 时回退到 example。"""
     cfg_path = Path(path) if path else DEFAULT_CONFIG_PATH
@@ -521,13 +557,15 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         if canon not in providers:
             providers[canon] = _merge_provider(canon, raw or {})
 
-    auto_order_raw = data.get("auto_order") or list(_DEFAULT_AUTO_ORDER)
-    if not isinstance(auto_order_raw, list):
-        auto_order_raw = list(_DEFAULT_AUTO_ORDER)
-    auto_order = [canonical_provider_name(str(x)) for x in auto_order_raw]
-    # 去重保序
-    seen = set()
-    auto_order = [x for x in auto_order if not (x in seen or seen.add(x))]
+    auto_order = _parse_provider_order(
+        data.get("auto_order"),
+        default=list(_DEFAULT_AUTO_ORDER),
+    )
+    # 策略专用 order：未配置或空列表 = 不限制；非空 = 白名单 + 默认顺序
+    free_order = _parse_provider_order(data.get("free_order"))
+    cost_order = _parse_provider_order(data.get("cost_order"))
+    speed_order = _parse_provider_order(data.get("speed_order"))
+    accuracy_order = _parse_provider_order(data.get("accuracy_order"))
 
     port_env = _env("ASR_PORT") or _env("DASHSCOPE_PORT")
     log_env = _env("ASR_LOG") or _env("DASHSCOPE_LOG")
@@ -555,5 +593,9 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         ffmpeg_path=_first_env("FFMPEG_PATH", default=str(data.get("ffmpeg_path") or "ffmpeg")),
         strategy=strategy,
         auto_order=auto_order,
+        free_order=free_order,
+        cost_order=cost_order,
+        speed_order=speed_order,
+        accuracy_order=accuracy_order,
         providers=providers,
     )

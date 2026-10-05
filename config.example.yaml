@@ -27,8 +27,8 @@ ffmpeg_path: "ffmpeg"
 #   strategy-cost                     费用优先（刊例价；美元按 1 USD=7 CNY 粗算）
 #   strategy-speed                    速度优先（静态 S1→S5）
 #   strategy-accuracy                 准确度优先（静态等级）
-#   strategy-free                     免费/有额度候选，保持配置顺序
-#   strategy-free+speed               免费集合内再按速度
+#   strategy-free                     免费/有额度候选，按 free_order（未配则用 auto_order）
+#   strategy-free+speed               免费集合内再按速度（候选受 free_order 约束）
 #   strategy-free+accuracy            免费集合内再按准确度
 strategy: auto
 
@@ -41,6 +41,18 @@ auto_order:
   - stepfun
   - tencent
   - baidu
+
+# 各 strategy-* 专用服务商顺序（可选）。
+# 未配置或空列表 = 不限制；非空 = 白名单（未列入则该策略不使用）。
+# free 无自身排序，free_order 即为其默认顺序；cost/speed/accuracy 作过滤与同分底序。
+# free+speed / free+accuracy 使用 free_order。
+# free_order:
+#   - siliconflow
+#   - groq
+#   - aliyun
+# cost_order: []
+# speed_order: []
+# accuracy_order: []
 
 providers:
 

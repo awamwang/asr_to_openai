@@ -126,10 +126,10 @@ class AccuracyFirstStrategy(RoutingStrategy):
 
 
 class FreeStrategy(RoutingStrategy):
-    """免费策略：只保留长期免费或带免费额度的模型，保持配置顺序。
+    """免费策略：只保留长期免费或带免费额度的模型。
 
-    额度余量尽量查询；查不到则调用失败后再试下一个；
-    无法感知则视为仍免费。
+    候选顺序由路由层按 free_order（未配置则 auto_order）预先排好；
+    本策略只做过滤，保持传入顺序。
     """
 
     name = "free"

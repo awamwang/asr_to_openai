@@ -105,6 +105,23 @@ class ProviderRouter:
                 result.append(p)
         return result
 
+    def _providers_for_strategy(self, strategy) -> List[AsrProvider]:
+        """按策略专用 order 过滤并排序已启用服务商。
+
+        未配置 order（空列表）时与 enabled_list 相同。
+        已配置时：未列入的服务商不参与该策略；列表顺序即默认顺序
+        （无自身排序的策略如 free 直接沿用；有排序的策略作稳定排序底序）。
+        组合策略（free+speed）使用前缀对应的 order（free_order）。
+        """
+        providers = self.enabled_list()
+        order = self.cfg.order_for_strategy(getattr(strategy, "name", "") or "")
+        if not order:
+            return providers
+        rank = {name: i for i, name in enumerate(order)}
+        filtered = [p for p in providers if p.name in rank]
+        filtered.sort(key=lambda p: rank[p.name])
+        return filtered
+
     def remember_success(self, provider_name: str, model_name: str) -> None:
         """记录成功的服务商与模型，供下次请求优先使用。"""
         if not provider_name:
@@ -165,7 +182,8 @@ class ProviderRouter:
         strategy = self._strategy_for_request(raw)
         if strategy is not None:
             return self._resolve_strategy_pool(
-                self.enabled_list(), duration, strategy, file_size,
+                self._providers_for_strategy(strategy),
+                duration, strategy, file_size,
             )
 
         if not m or m == "auto":

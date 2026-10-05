@@ -5,12 +5,14 @@
   - strategy-cost              费用优先（刊例付费价；美元按 1:7 折合）
   - strategy-speed             速度优先
   - strategy-accuracy          准确度优先
-  - strategy-free              免费策略（配置顺序）
-  - strategy-free+speed        免费候选上再按速度
+  - strategy-free              免费策略（按 free_order；未配则沿用 auto_order）
+  - strategy-free+speed        免费候选上再按速度（受 free_order 约束）
   - strategy-free+accuracy     免费候选上再按准确度
   - strategy-recommended       未实现（请求即报错，不对外列出）
 
 config.yaml 的 strategy 仅作兼容记录，不再改写 auto。
+各策略可配独立 order（free_order / cost_order / …）：非空时为白名单，
+未列入的服务商不参与该策略；无自身排序的策略（free）以此为默认顺序。
 """
 from __future__ import annotations
 

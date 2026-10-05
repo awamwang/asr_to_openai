@@ -523,6 +523,42 @@ class TestRouterStrategy:
         assert labels[0][0] == "aliyun"
         assert ("siliconflow", "SenseVoiceSmall") in labels
 
+    def test_free_order_whitelist_and_default_order(self, cfg_all_enabled):
+        cfg_all_enabled.free_order = ["siliconflow", "groq"]
+        router = ProviderRouter(cfg_all_enabled)
+        labels = _pool_labels(router.resolve("strategy-free", duration=20))
+        providers = [p for p, _ in labels]
+        assert providers[0] == "siliconflow"
+        assert "groq" in providers
+        assert "aliyun" not in providers
+        assert "doubao" not in providers
+
+    def test_cost_order_excludes_missing(self, cfg_all_enabled):
+        cfg_all_enabled.cost_order = ["aliyun", "doubao"]
+        router = ProviderRouter(cfg_all_enabled)
+        labels = _pool_labels(router.resolve("strategy-cost", duration=120))
+        providers = {p for p, _ in labels}
+        assert providers == {"aliyun", "doubao"}
+        assert "groq" not in providers
+
+    def test_free_plus_speed_uses_free_order(self, cfg_all_enabled):
+        cfg_all_enabled.free_order = ["groq", "siliconflow"]
+        router = ProviderRouter(cfg_all_enabled)
+        labels = _pool_labels(
+            router.resolve("strategy-free+speed", duration=20),
+        )
+        providers = {p for p, _ in labels}
+        assert "aliyun" not in providers
+        assert "groq" in providers
+        assert "siliconflow" in providers
+
+    def test_empty_strategy_order_keeps_all(self, cfg_all_enabled):
+        cfg_all_enabled.free_order = []
+        router = ProviderRouter(cfg_all_enabled)
+        labels = _pool_labels(router.resolve("strategy-free", duration=20))
+        providers = {p for p, _ in labels}
+        assert providers == {"aliyun", "doubao", "siliconflow", "groq"}
+
     def test_health_exposes_strategy_models(self, cfg_all_enabled):
         from fastapi.testclient import TestClient
         from asr_proxy.app import create_app
@@ -532,6 +568,8 @@ class TestRouterStrategy:
         assert r.status_code == 200
         body = r.json()
         assert body["strategy"] == "auto"
+        assert body["free_order"] == []
+        assert body["cost_order"] == []
         assert "strategy-cost" in body["strategy_models"]
         assert "strategy-free" in body["models"]
 

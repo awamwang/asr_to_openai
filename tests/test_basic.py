@@ -157,6 +157,31 @@ class TestConfig:
         assert "siliconflow.cn" in cfg.providers["siliconflow"].base_url
         assert cfg.providers["aliyun"].semantic_punctuation_enabled is False
         assert cfg.providers["aliyun"].max_sentence_silence == 2500
+        assert cfg.free_order == []
+        assert cfg.cost_order == []
+        assert cfg.speed_order == []
+        assert cfg.accuracy_order == []
+
+    def test_strategy_order_from_yaml(self, tmp_path):
+        p = tmp_path / "cfg.yaml"
+        p.write_text(
+            "auto_order: [aliyun]\n"
+            "free_order: [siliconflow, groq, aliyun]\n"
+            "cost_order: [stepfun, groq]\n"
+            "providers:\n"
+            "  aliyun: {api_key: sk-t, models: [m1]}\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(p)
+        assert cfg.free_order == ["siliconflow", "groq", "aliyun"]
+        assert cfg.cost_order == ["stepfun", "groq"]
+        assert cfg.speed_order == []
+        assert cfg.order_for_strategy("free") == ["siliconflow", "groq", "aliyun"]
+        assert cfg.order_for_strategy("free+speed") == [
+            "siliconflow", "groq", "aliyun",
+        ]
+        assert cfg.order_for_strategy("cost") == ["stepfun", "groq"]
+        assert cfg.order_for_strategy("speed") == []
 
     def test_api_key_enables_provider(self, cfg_aliyun_only):
         enabled = cfg_aliyun_only.enabled_providers()

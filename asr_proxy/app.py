@@ -96,6 +96,10 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
             "config_strategy": cfg.strategy,
             "enabled_providers": enabled,
             "auto_order": [p.name for p in router.enabled_list()],
+            "free_order": list(cfg.free_order),
+            "cost_order": list(cfg.cost_order),
+            "speed_order": list(cfg.speed_order),
+            "accuracy_order": list(cfg.accuracy_order),
             "models": model_ids,
             "last_success": {
                 "provider": router._last_provider,
