@@ -1,23 +1,38 @@
-# 复制为 config.yaml 后填写。也可通过环境变量覆盖（见各字段注释）。
-# 规则：某服务商的 api_key 非空 → 启用该服务商。
+# =============================================================================
+# ASR → OpenAI / 闪电说 代理 — 示例配置
+# =============================================================================
+# 用法：复制本文件为 config.yaml，填写各平台 api_key（或用环境变量覆盖）。
+# 规则：某服务商的 api_key 非空 → 启用该服务商；未启用不会被路由调用。
+# 选型与比价详见：docs/asr_models_guide.md
+# =============================================================================
 
 server:
   host: "127.0.0.1"
   port: 8004
-  # 可用环境变量 ASR_PORT 覆盖
+  # 环境变量：ASR_PORT
   log_file: "asr_proxy.log"
-  # 可用环境变量 ASR_LOG 覆盖
+  # 环境变量：ASR_LOG
 
 ffmpeg_path: "ffmpeg"
-# 可用环境变量 FFMPEG_PATH 覆盖
+# 环境变量：FFMPEG_PATH（阿里云 / 豆包识别前会转 16kHz 单声道 PCM）
 
-# 兼容字段：不再改写 auto。费用/速度/准确度/免费请在请求里填模型 ID：
-# strategy-cost / strategy-speed / strategy-accuracy / strategy-free
-# strategy-free+speed / strategy-free+accuracy
-# 环境变量 ASR_STRATEGY 仍可写入该字段，但不覆盖 auto 请求。
+# -----------------------------------------------------------------------------
+# 路由说明（请求 model 字段，不是靠下面 strategy 改写 auto）
+# -----------------------------------------------------------------------------
+# 兼容字段 strategy：仅作记录；环境变量 ASR_STRATEGY 可写入，但不会劫持 auto。
+# 真正策略请在请求里填模型 ID：
+#   auto                              服务商容灾（按 auto_order + 上次成功）
+#   服务商/auto                       只在该服务商 models 列表内切换
+#   服务商/模型名                     定点调用
+#   strategy-cost                     费用优先（刊例价；美元按 1 USD=7 CNY 粗算）
+#   strategy-speed                    速度优先（静态 S1→S5）
+#   strategy-accuracy                 准确度优先（静态等级）
+#   strategy-free                     免费/有额度候选，保持配置顺序
+#   strategy-free+speed               免费集合内再按速度
+#   strategy-free+accuracy            免费集合内再按准确度
 strategy: auto
 
-# auto：只在服务商之间切换；出错则试下一个。成功后下次优先从该服务商开始。
+# auto：服务商之间容灾；出错试下一个。成功后下次优先从该服务商开始。
 auto_order:
   - aliyun
   - doubao
@@ -25,77 +40,171 @@ auto_order:
   - groq
 
 providers:
+
+  # ---------------------------------------------------------------------------
+  # 阿里云百炼 DashScope（现有）
+  # ---------------------------------------------------------------------------
+  # 控制台：https://bailian.console.aliyun.com/
+  # 定价：  https://help.aliyun.com/zh/model-studio/model-pricing
+  # 3.1 流式模型页：
+  #   https://help.aliyun.com/zh/model-studio/qwen-audio-3-1-asr-flash-streaming
+  # 开通：阿里云账号 + 实名 → 开通百炼 → 建 API Key
+  # 鉴权：Authorization: Bearer <DASHSCOPE_API_KEY>
+  # 免费：ASR 多为 36000 秒(10h)/开通后 90 天；另有新用户试用金（以控制台为准）
+  # 计费：qwen-audio-3.1-asr-flash-streaming 按 Token（输入 6 / 输出 4.5 元每百万）；
+  #       3.0 flash 等仍有按秒刊例。策略侧按文档折算元/秒比价。
+  # 环境变量：DASHSCOPE_API_KEY / ALIYUN_API_KEY
+  #           DASHSCOPE_WORKSPACE_ID / ALIYUN_WORKSPACE_ID
+  #           DASHSCOPE_ASR_MODELS / ALIYUN_ASR_MODELS（逗号分隔）
+  #           DASHSCOPE_ASR_MODEL / ALIYUN_ASR_MODEL
+  #           DASHSCOPE_SEMANTIC_PUNCTUATION / ALIYUN_SEMANTIC_PUNCTUATION
+  #           DASHSCOPE_MAX_SENTENCE_SILENCE / ALIYUN_MAX_SENTENCE_SILENCE
+  #           ALIYUN_TIMEOUT
   aliyun:
-    # 环境变量：DASHSCOPE_API_KEY / ALIYUN_API_KEY
     api_key: ""
-    # 环境变量：DASHSCOPE_WORKSPACE_ID / ALIYUN_WORKSPACE_ID
     workspace_id: ""
-    # 多模型列表。对外 ID：aliyun/<模型名>；aliyun/auto 在此列表内切换。
-    # 环境变量：DASHSCOPE_ASR_MODELS / ALIYUN_ASR_MODELS（逗号分隔）
-    # 或单模型：DASHSCOPE_ASR_MODEL / ALIYUN_ASR_MODEL
+    # 对外 ID：aliyun/<模型名>；aliyun/auto 在此列表内切换
     models:
-      - qwen-audio-3.1-asr-flash-streaming
-      - qwen-audio-3.0-asr-flash
-      - qwen3-asr-flash-realtime
+      - qwen-audio-3.1-asr-flash-streaming   # 当前主力；流式 WS；速度 S4
+      - qwen-audio-3.0-asr-flash             # 同步/非流式；速度 S3
+      - qwen3-asr-flash-realtime             # 老款实时流式
     # 流式断句（仅 streaming/realtime）。标点预测本身无法关闭。
-    # False=VAD 断句（默认）；True=语义断句，少靠停顿、延迟更高。
-    # 环境变量：DASHSCOPE_SEMANTIC_PUNCTUATION / ALIYUN_SEMANTIC_PUNCTUATION
+    # False=VAD 断句（默认）；True=语义断句，少靠停顿、延迟更高
     semantic_punctuation_enabled: false
     # VAD 静音多久算一句结束（ms），范围 200–6000，官方默认 1300。
-    # 调大可减少极短停顿被切成逗号/句号。环境变量：DASHSCOPE_MAX_SENTENCE_SILENCE
+    # 调大可减少极短停顿被切成逗号/句号
     max_sentence_silence: 2500
 
-  groq:
-    # Groq Whisper（OpenAI 兼容）。环境变量：GROQ_API_KEY
-    api_key: ""
-    # 环境变量：GROQ_BASE_URL
-    base_url: "https://api.groq.com/openai/v1"
-    # 访问 Groq 常需代理。环境变量：GROQ_PROXY
-    # 例：http://127.0.0.1:7881 或 socks5h://127.0.0.1:1080
-    proxy: ""
-    # 环境变量：GROQ_TIMEOUT（秒）
-    timeout: 300
-    # 多模型列表。对外 ID：groq/<模型名>；groq/auto 在此列表内切换。
-    # 环境变量：GROQ_ASR_MODELS（逗号分隔）或 GROQ_DEFAULT_MODEL
-    models:
-      - whisper-large-v3
-      - whisper-large-v3-turbo
-
+  # ---------------------------------------------------------------------------
+  # 火山引擎·豆包（现有）
+  # ---------------------------------------------------------------------------
+  # 产品页：https://www.volcengine.com/product/asr
+  # 控制台：https://console.volcengine.com/speech
+  # 模型列表：https://docs.volcengine.com/docs/6561/2499930
+  # 接口说明：https://docs.volcengine.com/docs/6561/1354869
+  # 计费说明：https://docs.volcengine.com/docs/DoubaoVoice/Billinginstructions-21?lang=zh
+  # 开通：火山账号 + 实名 → 开通语音识别 → 取 api_key（旧版再加 app_id）
+  # 鉴权：新版仅 api_key（X-Api-Key）；旧版 app_id + access_token
+  # 免费：流式 / 录音文件各约 20 小时（一次性，以控制台为准）
+  # 计费：流式识别 2.0 约 4.5 元/时（毫秒级计量）；本代理走 bigmodel_nostream
+  # 环境变量：DOUBAO_API_KEY / VOLC_API_KEY / VOLC_ACCESS_KEY / VOLCENGINE_API_KEY
+  #           DOUBAO_APP_ID / VOLC_APP_ID / VOLC_APP_KEY / VOLCENGINE_APP_ID
+  #           DOUBAO_WS_URL / VOLC_WS_URL / DOUBAO_BASE_URL
+  #           DOUBAO_ASR_MODELS / VOLC_ASR_MODELS
+  #           DOUBAO_TIMEOUT / VOLC_TIMEOUT
   doubao:
-    # 豆包流式语音识别 1.0 / 2.0（火山 openspeech WebSocket）
-    # 文档：https://docs.volcengine.com/docs/6561/1354869
-    # 新版控制台：只填 api_key（X-Api-Key）
-    # 旧版控制台：填 app_id + api_key（Access Token）
-    # 环境变量：DOUBAO_API_KEY / VOLC_API_KEY / VOLC_ACCESS_KEY
     api_key: ""
-    # 环境变量：DOUBAO_APP_ID / VOLC_APP_ID / VOLC_APP_KEY
     app_id: ""
-    # 默认流式输入模式（准确率更高）。环境变量：DOUBAO_WS_URL
+    # 默认非流式返回的 WebSocket（准确率更高）
     base_url: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
-    # 环境变量：DOUBAO_TIMEOUT（秒）
     timeout: 90
     # 对外 ID：doubao/asr-2.0、doubao/asr-1.0；doubao/auto 在列表内切换
+    # asr-2.0 → volc.seedasr.sauc.duration（SeedASR 2.0）
     # asr-1.0 → volc.bigasr.sauc.duration
-    # asr-2.0 → volc.seedasr.sauc.duration
     # 也可直接填资源 ID，如 volc.seedasr.sauc.concurrent
-    # 环境变量：DOUBAO_ASR_MODELS（逗号分隔）
     models:
       - asr-2.0
       - asr-1.0
 
+  # ---------------------------------------------------------------------------
+  # 硅基流动 SiliconFlow（现有）
+  # ---------------------------------------------------------------------------
+  # 定价：  https://siliconflow.cn/pricing
+  # 密钥：  https://cloud.siliconflow.cn/account/ak
+  # 接口：  https://docs.siliconflow.cn/cn/api-reference/audio/create-audio-transcriptions
+  # 开通：注册 + 实名 → 建 API Key（国内直连，一般无需代理）
+  # 鉴权：Authorization: Bearer <SILICONFLOW_API_KEY>
+  # 免费：FunAudioLLM/SenseVoiceSmall、TeleAI/TeleSpeechASR 长期免费
+  # 说明：无刊例价，只进 strategy-free（及组合），不进 strategy-cost
+  #       「建议 ≤5min」不是硬限，策略不会因此排除
+  # 环境变量：SILICONFLOW_API_KEY / SF_API_KEY
+  #           SILICONFLOW_BASE_URL / SF_BASE_URL
+  #           SILICONFLOW_PROXY / SF_PROXY
+  #           SILICONFLOW_ASR_MODELS / SF_ASR_MODELS
+  #           SILICONFLOW_TIMEOUT / SF_TIMEOUT
   siliconflow:
-    # 硅基流动 SenseVoice（中文优化，常有免费额度）
-    # 文档：https://siliconflow.readme.io/reference/createaudiotranscriptions
-    # 控制台：https://cloud.siliconflow.cn/account/ak
-    # 环境变量：SILICONFLOW_API_KEY / SF_API_KEY
     api_key: ""
-    # 环境变量：SILICONFLOW_BASE_URL
     base_url: "https://api.siliconflow.cn/v1"
-    # 国内一般直连；如需代理：SILICONFLOW_PROXY
     proxy: ""
-    # 环境变量：SILICONFLOW_TIMEOUT（秒）
     timeout: 120
     # 对外 ID：siliconflow/SenseVoiceSmall（短名会映射到 FunAudioLLM/SenseVoiceSmall）
-    # 环境变量：SILICONFLOW_ASR_MODELS
     models:
       - SenseVoiceSmall
+
+  # ---------------------------------------------------------------------------
+  # Groq（现有，海外）
+  # ---------------------------------------------------------------------------
+  # 定价：  https://groq.com/pricing
+  # 控制台：https://console.groq.com
+  # 开通：注册 Groq → API Key；国内访问通常需要 HTTP/SOCKS 代理
+  # 鉴权：Authorization: Bearer <GROQ_API_KEY>（OpenAI 兼容 /audio/transcriptions）
+  # 免费：Free 层约 2000 次/日、7200 秒/时、28800 秒/日（以控制台为准）
+  # 硬限：单次文件 ≤25MB（策略会排除超限候选）
+  # 计费：whisper-large-v3 $0.111/时，turbo $0.04/时；最短按 10s 计费（非硬拒）
+  #       strategy-cost 按固定汇率 1 USD = 7 CNY 粗算后再与人民币刊例比价
+  # 环境变量：GROQ_API_KEY（兼容 XAI_API_KEY / GROK_API_KEY）
+  #           GROQ_BASE_URL / GROK_BASE_URL / XAI_BASE_URL
+  #           GROQ_PROXY / GROK_PROXY
+  #           GROQ_ASR_MODELS / GROQ_DEFAULT_MODEL
+  #           GROQ_TIMEOUT / GROK_TIMEOUT
+  groq:
+    api_key: ""
+    base_url: "https://api.groq.com/openai/v1"
+    # 例：http://127.0.0.1:7881 或 socks5h://127.0.0.1:1080
+    # （socks5:// 本地解析 DNS 常 TLS 失败，请用 socks5h://）
+    proxy: ""
+    timeout: 300
+    # 对外 ID：groq/<模型名>；groq/auto 在此列表内切换
+    models:
+      - whisper-large-v3
+      - whisper-large-v3-turbo
+
+  # ---------------------------------------------------------------------------
+  # 以下为文档拟新增平台（档案已登记，服务商代码尚未接入）
+  # 接入并启用后会自动进入 strategy-* 候选池；当前填写也不会生效。
+  # 详见 docs/asr_models_guide.md 第四部分。
+  # ---------------------------------------------------------------------------
+
+  # 阶跃星辰 StepFun — 性价比主力（拟接入）
+  # 开放平台：https://platform.stepfun.com/
+  # 定价：    https://platform.stepfun.com/docs/zh/guides/pricing/details
+  # 接口：POST /v1/audio/transcriptions（OpenAI 风格），Bearer 单一密钥
+  # 计费：stepaudio-2.5-asr 0.15 元/时；流式 stepaudio-2.5-asr-stream 1.2 元/时
+  # 无长期免费，不进 strategy-free；刊例最低，常为 strategy-cost 首选
+  # stepfun:
+  #   api_key: ""
+  #   base_url: "https://api.stepfun.com/v1"
+  #   models:
+  #     - stepaudio-2.5-asr
+
+  # 腾讯云 ASR — 极速版(S1) / 大模型2.0 异步(S5)（拟接入）
+  # 产品：https://cloud.tencent.com/product/asr
+  # 控制台：https://console.cloud.tencent.com/asr
+  # 计费：https://cloud.tencent.com/document/product/1093/35686
+  # CAM 密钥：https://console.cloud.tencent.com/cam/capi
+  # 鉴权：TC3-HMAC-SHA256（SecretId / SecretKey / AppID）
+  # 免费（每月）：录音文件极速版 5h、录音文件 10h 等（以控制台为准）
+  # 硬限：极速版 16k_zh_en → t>2h 或文件>100MB 会被策略排除
+  # 计费粒度：按时长产品最低 1 秒
+  # tencent:
+  #   secret_id: ""
+  #   secret_key: ""
+  #   app_id: ""
+  #   models:
+  #     - 16k_zh_en        # 录音文件识别极速版（同步，S1）
+  #     - 16k_zh_en_2.0    # 录音文件·大模型 2.0（异步，S5，0.8 元/时）
+
+  # 百度智能云 短语音（拟接入）
+  # 首页：https://ai.baidu.com/tech/speech
+  # 控制台：https://console.bce.baidu.com/speech/
+  # 短语音文档：https://ai.baidu.com/ai-doc/SPEECH/Vk38lxily
+  # 鉴权：AppID / API Key / Secret Key → OAuth access_token（约 30 天）
+  # 免费：标准版(1537)约 200 万次；极速版(80001) 5 万次（长期有效）
+  # 硬限：单次 ≤60 秒；超限会被 strategy-* 排除
+  # baidu:
+  #   app_id: ""
+  #   api_key: ""
+  #   secret_key: ""
+  #   models:
+  #     - "1537"    # 短语音标准版
+  #     - "80001"   # 短语音极速版
