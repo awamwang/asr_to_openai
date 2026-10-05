@@ -61,6 +61,8 @@ def cfg_all_enabled() -> AppConfig:
         ffmpeg_path=os.environ.get("FFMPEG_PATH", "ffmpeg"),
         strategy="auto",
         auto_order=["aliyun", "doubao", "siliconflow", "groq"],
+        audio_preprocess=False,
+        max_failover_candidates=0,
         providers={
             "aliyun": _provider_cfg("aliyun", "sk-t", [
                 "qwen-audio-3.1-asr-flash-streaming",

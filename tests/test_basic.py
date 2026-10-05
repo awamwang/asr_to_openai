@@ -58,6 +58,8 @@ def cfg_aliyun_only() -> AppConfig:
         log_file=str(ROOT / "test_asr_proxy.log"),
         ffmpeg_path=os.environ.get("FFMPEG_PATH", "ffmpeg"),
         auto_order=["aliyun", "groq"],
+        audio_preprocess=False,
+        max_failover_candidates=0,
         providers={
             "aliyun": ProviderConfig(
                 name="aliyun",
@@ -86,6 +88,8 @@ def cfg_both_enabled() -> AppConfig:
         log_file=str(ROOT / "test_asr_proxy.log"),
         ffmpeg_path="ffmpeg",
         auto_order=["groq", "aliyun"],
+        audio_preprocess=False,
+        max_failover_candidates=0,
         providers={
             "aliyun": ProviderConfig(
                 name="aliyun",
@@ -157,10 +161,16 @@ class TestConfig:
         assert "siliconflow.cn" in cfg.providers["siliconflow"].base_url
         assert cfg.providers["aliyun"].semantic_punctuation_enabled is False
         assert cfg.providers["aliyun"].max_sentence_silence == 2500
-        assert cfg.free_order == []
+        assert cfg.free_order == [
+            "tencent", "aliyun", "baidu", "doubao", "siliconflow", "groq",
+        ]
         assert cfg.cost_order == []
         assert cfg.speed_order == []
         assert cfg.accuracy_order == []
+        assert cfg.max_failover_candidates == 4
+        assert cfg.failover_cooldown_sec == 300
+        assert cfg.audio_preprocess is True
+        assert cfg.audio_trim_silence is True
         assert cfg.log_level == "info"
         assert cfg.log_backup_days == 7
 
@@ -835,7 +845,10 @@ class TestDoubao:
 
         with patch.dict("sys.modules", {"websocket": fake_mod}):
             with patch("asr_proxy.providers.doubao.to_wav_16k_mono", return_value="fake.wav"):
-                with patch("asr_proxy.providers.doubao._wav_to_pcm", return_value=b"\x00\x01" * 3200):
+                with patch(
+                    "asr_proxy.providers.doubao.wav_to_pcm_s16le",
+                    return_value=(b"\x00\x01" * 3200, 16000),
+                ):
                     with patch("asr_proxy.providers.doubao.cleanup"):
                         result = p.recognize(
                             wav_bytes, filename="test.wav", model="asr-2.0",

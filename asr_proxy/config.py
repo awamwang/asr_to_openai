@@ -140,6 +140,16 @@ class AppConfig:
     speed_order: List[str] = field(default_factory=list)
     accuracy_order: List[str] = field(default_factory=list)
     providers: Dict[str, ProviderConfig] = field(default_factory=dict)
+    # 容灾：auto / strategy-* 最多尝试几个候选（0=不限制）
+    max_failover_candidates: int = 4
+    # 硬失败（quota/auth/permission/not_activated）短时跳过秒数
+    failover_cooldown_sec: float = 300.0
+    # 软失败（upstream/empty 等）短时跳过秒数
+    failover_soft_cooldown_sec: float = 60.0
+    # 识别前统一转 16k 单声道；失败则回退原音频
+    audio_preprocess: bool = True
+    # 预处理时裁首尾静音（依赖 ffmpeg silenceremove）
+    audio_trim_silence: bool = True
 
     def enabled_providers(self) -> List[ProviderConfig]:
         """按 auto_order 返回已启用的服务商列表。"""
@@ -631,6 +641,47 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
     else:
         strategy = strategy_norm
 
+    routing = data.get("routing") if isinstance(data.get("routing"), dict) else {}
+    max_fail = _env("ASR_MAX_FAILOVER_CANDIDATES") or str(
+        routing.get("max_failover_candidates", data.get("max_failover_candidates", 4))
+    )
+    try:
+        max_failover_candidates = max(0, int(max_fail))
+    except (TypeError, ValueError):
+        max_failover_candidates = 4
+    cool = _env("ASR_FAILOVER_COOLDOWN_SEC") or str(
+        routing.get("failover_cooldown_sec", data.get("failover_cooldown_sec", 300))
+    )
+    soft = _env("ASR_FAILOVER_SOFT_COOLDOWN_SEC") or str(
+        routing.get(
+            "failover_soft_cooldown_sec",
+            data.get("failover_soft_cooldown_sec", 60),
+        )
+    )
+    try:
+        failover_cooldown_sec = max(0.0, float(cool))
+    except (TypeError, ValueError):
+        failover_cooldown_sec = 300.0
+    try:
+        failover_soft_cooldown_sec = max(0.0, float(soft))
+    except (TypeError, ValueError):
+        failover_soft_cooldown_sec = 60.0
+    audio = data.get("audio") if isinstance(data.get("audio"), dict) else {}
+    audio_preprocess = _bool_env(
+        "ASR_AUDIO_PREPROCESS",
+        default=_as_bool(
+            audio.get("preprocess", data.get("audio_preprocess", True)),
+            default=True,
+        ),
+    )
+    audio_trim_silence = _bool_env(
+        "ASR_AUDIO_TRIM_SILENCE",
+        default=_as_bool(
+            audio.get("trim_silence", data.get("audio_trim_silence", True)),
+            default=True,
+        ),
+    )
+
     return AppConfig(
         host=str(server.get("host") or "127.0.0.1"),
         port=int(port_env or server.get("port") or 8004),
@@ -645,4 +696,9 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         speed_order=speed_order,
         accuracy_order=accuracy_order,
         providers=providers,
+        max_failover_candidates=max_failover_candidates,
+        failover_cooldown_sec=failover_cooldown_sec,
+        failover_soft_cooldown_sec=failover_soft_cooldown_sec,
+        audio_preprocess=audio_preprocess,
+        audio_trim_silence=audio_trim_silence,
     )

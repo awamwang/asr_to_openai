@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import mimetypes
 import os
-import re
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from asr_proxy.config import ProviderConfig, normalize_proxy
 from asr_proxy.providers.base import AsrProvider, AsrResult
+from asr_proxy.textutil import strip_model_tags
 
 DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
 DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1"
@@ -41,10 +41,6 @@ _CONTENT_TYPES = {
     ".mkv": "video/x-matroska",
 }
 
-# SenseVoice 富文本标签，例如 <|zh|><|NEUTRAL|><|Speech|>
-_SENSEVOICE_TAG_RE = re.compile(r"<\|[^|]*\|>")
-
-
 def resolve_model_name(model: str) -> str:
     """将配置/请求中的模型名解析为上游 ID。"""
     m = (model or "").strip()
@@ -55,9 +51,8 @@ def resolve_model_name(model: str) -> str:
 
 
 def clean_sensevoice_text(text: str) -> str:
-    """去掉 SenseVoice 情感/语种等特殊标签，只保留正文。"""
-    cleaned = _SENSEVOICE_TAG_RE.sub("", text or "")
-    return cleaned.strip()
+    """去掉 SenseVoice 情感/语种等特殊标签，只保留正文（兼容旧调用）。"""
+    return strip_model_tags(text).strip()
 
 
 def _guess_content_type(filename: str) -> str:

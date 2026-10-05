@@ -16,7 +16,6 @@ import hmac
 import json
 import os
 import random
-import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -177,16 +176,9 @@ def _join_clauses(left: str, right: str) -> str:
 
 
 def smooth_spoken_text(text: str) -> str:
-    """去掉口语停顿逗号（闪电说场景下「主要，目的就是，给，」观感像空白过多）。
-
-    保留句末 。？！… 与英文 .?!；压缩连续空白。
-    """
-    if not text:
-        return ""
-    # 中文停顿逗号、顿号一律去掉；英文逗号两侧若夹汉字也去掉
-    out = text.replace("，", "").replace("、", "").replace(",", "")
-    out = re.sub(r"[ \t]+", "", out)
-    return out.strip()
+    """口语停顿清洗（委托统一出口；兼容旧调用）。"""
+    from asr_proxy.textutil import normalize_asr_text
+    return normalize_asr_text(text)
 
 
 def merge_flash_sentences(

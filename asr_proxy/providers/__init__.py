@@ -6,13 +6,14 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from asr_proxy.audio import probe_audio_duration
+from asr_proxy.audio import preprocess_audio_bytes, probe_audio_duration
 from asr_proxy.config import AppConfig, canonical_provider_name
 from asr_proxy.logutil import as_logger
 from asr_proxy.providers.aliyun import AliyunProvider
 from asr_proxy.providers.baidu import BaiduProvider
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.providers.doubao import DoubaoProvider
+from asr_proxy.providers.errors import AsrProviderError
 from asr_proxy.providers.groq import GroqProvider
 from asr_proxy.providers.siliconflow import SiliconFlowProvider
 from asr_proxy.providers.stepfun import StepFunProvider
@@ -22,6 +23,10 @@ from asr_proxy.strategy import (
     build_strategy,
     parse_request_strategy,
 )
+from asr_proxy.textutil import normalize_asr_text
+
+# 硬失败：额度/鉴权类，冷却更长
+_HARD_FAIL_CODES = frozenset({"quota", "auth", "permission", "not_activated"})
 
 
 def _fmt_elapsed(seconds: float) -> str:
@@ -92,6 +97,8 @@ class ProviderRouter:
         self._last_provider: Optional[str] = None
         # 各服务商上次成功的模型；下次 auto / 服务商/auto 默认从此开始
         self._last_model_by_provider: Dict[str, str] = {}
+        # label → 冷却截止时间戳（失败后短时跳过，降低延迟）
+        self._cooldown_until: Dict[str, float] = {}
 
     def set_log_fn(self, log_fn: Optional[object] = None) -> None:
         """设置公共日志（Logger 或测试回调）。"""
@@ -133,6 +140,67 @@ class ProviderRouter:
         self._last_provider = provider_name
         if model_name:
             self._last_model_by_provider[provider_name] = model_name
+        label = f"{provider_name}/{model_name}" if model_name else provider_name
+        self._cooldown_until.pop(label, None)
+
+    def _mark_failure(self, label: str, exc: Optional[BaseException] = None) -> None:
+        """失败后写入短时冷却。硬失败用长冷却，软失败用短冷却。"""
+        hard = float(self.cfg.failover_cooldown_sec or 0)
+        soft = float(self.cfg.failover_soft_cooldown_sec or 0)
+        code = ""
+        if isinstance(exc, AsrProviderError):
+            code = exc.code or ""
+        sec = hard if code in _HARD_FAIL_CODES else soft
+        if sec <= 0 or not label:
+            return
+        self._cooldown_until[label] = time.time() + sec
+
+    def _is_cooling(self, label: str) -> bool:
+        until = self._cooldown_until.get(label) or 0.0
+        if until <= 0:
+            return False
+        if time.time() >= until:
+            self._cooldown_until.pop(label, None)
+            return False
+        return True
+
+    def _apply_failover_policy(
+        self,
+        candidates: List[RouteCandidate],
+        *,
+        route_mode: str,
+        strategy_name: str = "",
+    ) -> List[RouteCandidate]:
+        """auto / strategy-*：跳过冷却中模型，并截断候选长度。显式定点不截断。"""
+        if not candidates:
+            return candidates
+        is_failover = route_mode in ("auto", "provider-auto") or bool(strategy_name)
+        if not is_failover:
+            return candidates
+
+        active = [c for c in candidates if not self._is_cooling(c.label)]
+        skipped = [c.label for c in candidates if c not in active]
+        if skipped:
+            self._log(
+                f"[recognize] 冷却跳过({len(skipped)})={skipped}",
+                "debug",
+            )
+        # 全在冷却时仍全部尝试，避免无可用候选
+        pool = active if active else list(candidates)
+
+        # free / free+* 与 auto 默认截断；0 表示不限制
+        cap = int(self.cfg.max_failover_candidates or 0)
+        apply_cap = (
+            route_mode in ("auto", "provider-auto")
+            or (strategy_name or "").startswith("free")
+        )
+        if apply_cap and cap > 0 and len(pool) > cap:
+            self._log(
+                f"[recognize] 候选截断 {len(pool)}→{cap}（max_failover_candidates）",
+                "debug",
+            )
+            pool = pool[:cap]
+        return pool
 
     def _preferred_model(self, provider: AsrProvider) -> str:
         """取服务商优先模型：上次成功 > 配置首项。"""
@@ -284,14 +352,37 @@ class ProviderRouter:
         language: Optional[str] = None,
     ) -> Tuple[AsrResult, List[str]]:
         """识别音频。返回 (结果, 失败记录列表)。全部失败则抛出最后一个异常。"""
+        work_bytes = audio_bytes
+        work_name = filename
+        if self.cfg.audio_preprocess and audio_bytes:
+            try:
+                work_bytes, work_name = preprocess_audio_bytes(
+                    audio_bytes,
+                    filename=filename,
+                    ffmpeg=self.cfg.ffmpeg_path,
+                    trim_silence=bool(self.cfg.audio_trim_silence),
+                )
+                self._log(
+                    f"[recognize] 音频预处理完成 bytes={len(audio_bytes)}→{len(work_bytes)} "
+                    f"trim_silence={bool(self.cfg.audio_trim_silence)}",
+                    "debug",
+                )
+            except Exception as e:
+                self._log(
+                    f"[recognize] 音频预处理失败，回退原音频: {type(e).__name__}: {e}",
+                    "warning",
+                )
+                work_bytes, work_name = audio_bytes, filename
+
         # 策略模型 ID 需要音频时长做硬限/刊例比价；只需探测一次。
         # 文件体积直接取字节数，用于 Groq 25MB / 腾讯极速版 100MB 硬限。
         duration: Optional[float] = None
-        file_size: Optional[int] = len(audio_bytes) if audio_bytes else None
+        file_size: Optional[int] = len(work_bytes) if work_bytes else None
         req_strategy = self._strategy_for_request(model)
         route_mode = self._route_mode(model, req_strategy)
+        strategy_name = getattr(req_strategy, "name", "") or ""
         if req_strategy is not None and req_strategy.needs_duration:
-            duration = probe_audio_duration(audio_bytes, self.cfg.ffmpeg_path)
+            duration = probe_audio_duration(work_bytes, self.cfg.ffmpeg_path)
             self._log(
                 f"[recognize] 模式={route_mode} "
                 f"音频时长={duration if duration is not None else '未知'} "
@@ -299,6 +390,9 @@ class ProviderRouter:
                 "debug",
             )
         candidates = self.resolve(model, duration=duration, file_size=file_size)
+        candidates = self._apply_failover_policy(
+            candidates, route_mode=route_mode, strategy_name=strategy_name,
+        )
         pool = [c.label for c in candidates]
         if not candidates:
             msg = (
@@ -333,14 +427,28 @@ class ProviderRouter:
             t0 = time.perf_counter()
             try:
                 result = c.provider.recognize(
-                    audio_bytes,
-                    filename=filename,
+                    work_bytes,
+                    filename=work_name,
                     model=c.model,
                     language=language,
                 )
                 elapsed = time.perf_counter() - t0
                 cost = _fmt_elapsed(elapsed)
                 if result and result.text:
+                    cleaned = normalize_asr_text(result.text)
+                    if not cleaned:
+                        raise AsrProviderError(
+                            "清洗后为空文本",
+                            code="empty",
+                            provider=c.provider.name,
+                            model=c.model,
+                        )
+                    result.text = cleaned
+                    if result.segments:
+                        for seg in result.segments:
+                            seg["text"] = normalize_asr_text(
+                                str(seg.get("text") or ""),
+                            )
                     used_model = result.model or c.model
                     result.provider = result.provider or c.provider.name
                     result.model = used_model
@@ -361,6 +469,7 @@ class ProviderRouter:
                     return result, errors
                 err = f"{c.label}: 返回空文本"
                 errors.append(err)
+                self._mark_failure(c.label, AsrProviderError("空文本", code="empty"))
                 switch_steps.append(f"{c.label}(失败 {cost}: 返回空文本)")
                 self._log(
                     f"[recognize] 尝试[{i}/{total}] {c.label} → 失败 {cost}: 返回空文本",
@@ -370,6 +479,7 @@ class ProviderRouter:
                 elapsed = time.perf_counter() - t0
                 cost = _fmt_elapsed(elapsed)
                 last_exc = e
+                self._mark_failure(c.label, e)
                 reason = f"{type(e).__name__}: {e}"
                 err = f"{c.label}: {reason}"
                 errors.append(err)

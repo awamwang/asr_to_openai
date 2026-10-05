@@ -24,6 +24,8 @@
 
 ---
 
+> 客户端对接（闪电说协议、实时 WS 与 Flash 差异、提供给其他软件时的检查清单）见 [docs/client_integration.md](docs/client_integration.md)。
+
 ## 一、闪电说真实协议（最重要）
 
 面板**不走** OpenAI 的 `/v1/audio/transcriptions`，而是：

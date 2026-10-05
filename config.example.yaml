@@ -64,6 +64,17 @@ free_order:
 # speed_order: []
 # accuracy_order: []
 
+# 容灾与延迟（auto / strategy-free*；显式定点不受限）
+routing:
+  max_failover_candidates: 4      # 最多尝试几个候选；0=不限制
+  failover_cooldown_sec: 300      # 硬失败（quota/auth 等）短时跳过秒数
+  failover_soft_cooldown_sec: 60  # 软失败短时跳过秒数
+
+# 识别前统一：16k 单声道 + 裁首尾静音（失败回退原音频）
+audio:
+  preprocess: true
+  trim_silence: true
+
 providers:
 
   # ---------------------------------------------------------------------------
