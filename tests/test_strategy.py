@@ -31,7 +31,12 @@ from asr_proxy.strategy.impl import (
     RecommendedStrategy,
     SpeedFirstStrategy,
 )
-from asr_proxy.strategy.metadata import estimate_cost, get_profile, is_free_profile
+from asr_proxy.strategy.metadata import (
+    USD_TO_CNY,
+    estimate_cost,
+    get_profile,
+    is_free_profile,
+)
 
 WAV_PATH = ROOT / "test_asr_16k.wav"
 
@@ -181,9 +186,9 @@ class TestMetadata:
         assert estimate_cost(p, 100) == pytest.approx(0.00026 * 100)
 
     def test_estimate_cost_min_billing(self):
-        # Groq 最短按 10s 计：3s 音频也按 10s 收费
+        # Groq 最短按 10s 计：3s 音频也按 10s 收费，再按 1:7 折人民币
         p = get_profile("groq", "whisper-large-v3")
-        assert estimate_cost(p, 3) == pytest.approx(0.000031 * 10)
+        assert estimate_cost(p, 3) == pytest.approx(0.000031 * 10 * USD_TO_CNY)
 
     def test_estimate_cost_per_call_and_limit(self):
         p = get_profile("baidu", "1537")
@@ -210,11 +215,11 @@ class TestCostStrategy:
         ]
         ordered = CostFirstStrategy().rank(pool, duration=120)
         labels = _pair_labels(ordered)
-        # 硅基无刊例价、Groq 为 USD，均不进入 cost
+        # 硅基无刊例价不进入 cost；Groq 美元按 1:7 折合后进入
         assert ("siliconflow", "SenseVoiceSmall") not in labels
-        assert all(p != "groq" for p, _ in labels)
-        # 人民币刊例：阿里秒价低于豆包
-        assert labels[0][0] == "aliyun"
+        assert ("groq", "whisper-large-v3-turbo") in labels
+        # turbo 折合约 0.28 元/时，低于阿里 ≈0.94 元/时
+        assert labels[0] == ("groq", "whisper-large-v3-turbo")
         assert ("doubao", "asr-2.0") in labels
 
     def test_quota_does_not_beat_cheaper_paid(self, monkeypatch):
@@ -454,7 +459,7 @@ class TestRouterStrategy:
     def test_cost_resolve_by_model_id(self, cfg_all_enabled):
         router = ProviderRouter(cfg_all_enabled)
         labels = _pool_labels(router.resolve("strategy-cost", duration=120))
-        assert labels[0][0] == "aliyun"
+        assert labels[0] == ("groq", "whisper-large-v3-turbo")
         assert ("siliconflow", "SenseVoiceSmall") not in labels
         assert ("doubao", "asr-2.0") in labels
 
@@ -488,7 +493,7 @@ class TestRouterStrategy:
         assert labels[0] == ("aliyun", "qwen-audio-3.1-asr-flash-streaming")
 
     def test_recognize_probes_duration_for_cost(self, cfg_all_enabled, wav_bytes):
-        from asr_proxy.providers.aliyun import AliyunProvider
+        from asr_proxy.providers.groq import GroqProvider
 
         router = ProviderRouter(cfg_all_enabled)
         probed = {}
@@ -497,15 +502,16 @@ class TestRouterStrategy:
             probed["bytes"] = audio_bytes
             return 42.0
 
-        def fake_aliyun(self, audio_bytes, filename="audio.wav", model=None, language=None):
-            return AsrResult(text="刊例通道成功", provider="aliyun", model=model)
+        def fake_groq(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            return AsrResult(text="刊例通道成功", provider="groq", model=model)
 
         with patch("asr_proxy.providers.probe_audio_duration", fake_probe):
-            with patch.object(AliyunProvider, "recognize", fake_aliyun):
+            with patch.object(GroqProvider, "recognize", fake_groq):
                 result, errors = router.recognize(wav_bytes, model="strategy-cost")
 
         assert probed["bytes"] == wav_bytes
-        assert result.provider == "aliyun"
+        assert result.provider == "groq"
+        assert result.model == "whisper-large-v3-turbo"
 
     def test_free_resolve(self, cfg_all_enabled):
         router = ProviderRouter(cfg_all_enabled)

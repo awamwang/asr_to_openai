@@ -15,13 +15,16 @@
     策略路由会跳过，避免选到必然失败的模型
 
 价格/免费额度厂商可能调整，下单前以各平台控制台为准。
-Groq 价格为美元（currency=USD），不进入人民币费用优先 `strategy-cost`；
-可走 `strategy-free` / `strategy-speed` / `strategy-accuracy` 或显式模型 ID。
+Groq 价格为美元（currency=USD），`strategy-cost` 按固定汇率 1 USD = 7 CNY
+折合后参与人民币刊例比价（粗略，非实时牌价）。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
+
+# 美元刊例折合人民币的固定粗略汇率（仅用于费用优先比价）
+USD_TO_CNY = 7.0
 
 # (服务商, 模型) → 配置档案；键已小写化
 _ProfileKey = Tuple[str, str]
@@ -314,6 +317,14 @@ def get_profile(provider: str, model: str) -> ModelProfile:
     )
 
 
+def to_cny(profile: ModelProfile, amount: float) -> float:
+    """把档案币种金额折成人民币；USD 用固定汇率 USD_TO_CNY，其余原样。"""
+    cur = (profile.cost.currency or "CNY").strip().upper()
+    if cur == "USD":
+        return amount * USD_TO_CNY
+    return amount
+
+
 def is_free_profile(profile: ModelProfile) -> bool:
     """是否可作为免费策略候选：长期免费或带免费额度。"""
     if profile.cost.billing == "free":
@@ -322,25 +333,29 @@ def is_free_profile(profile: ModelProfile) -> bool:
 
 
 def estimate_cost(profile: ModelProfile, duration: Optional[float]) -> Optional[float]:
-    """按音频时长 t（秒）预估单次刊例费用。返回 None 表示无法预估。
+    """按音频时长 t（秒）预估单次刊例费用（人民币）。返回 None 表示无法预估。
 
     规则（docs/asr_models_guide.md 费用优先）：
       - billing=free → None（无刊例价，不进 cost）
       - per_second → 秒单价 × max(t, 最短计费时长)
       - per_call → 按次价（超出硬上限视为不可用，由调用方在 rank 中排除）
+      - USD 刊例 × USD_TO_CNY（1:7）后再返回
       - 其他 → None
     免费额度不把费用算成 0。
     """
     cost = profile.cost
     if cost.billing == "free":
         return None
+    raw: Optional[float] = None
     if cost.billing == "per_second":
         if duration is None:
             return None
         t = max(float(duration), cost.min_bill_sec)
-        return cost.price_per_sec * t
-    if cost.billing == "per_call":
+        raw = cost.price_per_sec * t
+    elif cost.billing == "per_call":
         if duration is not None and cost.max_duration > 0 and duration > cost.max_duration:
             return None
-        return cost.price_per_call
-    return None
+        raw = cost.price_per_call
+    if raw is None:
+        return None
+    return to_cny(profile, raw)

@@ -2,7 +2,7 @@
 """路由策略注册与工厂。
 
 策略通过请求模型 ID 选择（前缀 strategy-），不覆盖 auto / 服务商/auto / 显式服务商/模型：
-  - strategy-cost              费用优先（刊例付费价）
+  - strategy-cost              费用优先（刊例付费价；美元按 1:7 折合）
   - strategy-speed             速度优先
   - strategy-accuracy          准确度优先
   - strategy-free              免费策略（配置顺序）

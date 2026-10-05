@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from asr_proxy.strategy.base import ProviderModel, RoutingStrategy
-from asr_proxy.strategy.metadata import estimate_cost, get_profile, is_free_profile
+from asr_proxy.strategy.metadata import estimate_cost, get_profile, is_free_profile, to_cny
 
 
 def _usable(
@@ -39,7 +39,7 @@ def _list_cost(profile, duration: Optional[float]) -> float:
     spec = profile.cost
     if spec.billing == "per_second" and duration is None:
         billed = max(spec.min_bill_sec, 1.0)
-        return spec.price_per_sec * billed
+        return to_cny(profile, spec.price_per_sec * billed)
     return float("inf")
 
 
@@ -48,7 +48,7 @@ class CostFirstStrategy(RoutingStrategy):
 
     规则来自 docs/asr_models_guide.md：
       1. 无刊例价（长期免费）不进入本策略；
-      2. 非人民币刊例（如 Groq USD）不混比；
+      2. 美元刊例按固定汇率 1 USD = 7 CNY 折合后比价；
       3. 对「按次价 vs 秒单价 × t」取低；硬限超出则排除；
       4. 无法预估的未知模型排最后（保持配置顺序）。
     """
@@ -68,8 +68,6 @@ class CostFirstStrategy(RoutingStrategy):
             if not _usable(profile, duration, file_size):
                 continue
             if profile.cost.billing == "free":
-                continue
-            if profile.cost.currency and profile.cost.currency.upper() != "CNY":
                 continue
             scored.append((_list_cost(profile, duration), provider, model))
         scored.sort(key=lambda item: item[0])
