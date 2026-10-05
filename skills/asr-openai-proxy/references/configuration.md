@@ -2,6 +2,7 @@
 
 > 数据来源：项目 `config.py`、`config.example.yaml`、`docs/asr_models_guide.md`、`README.md`。
 > 价格 / 免费额度可能随厂商调整，以各平台控制台为准。
+> 产品主场景：实时客户端的**短切段**识别（数秒～约 1 分钟），不是几十分钟整篇录音的离线长转写。
 
 ## 0. 生成配置文件（标准流程）
 
@@ -158,7 +159,7 @@ server:
   log_level: "info"          # debug|info|warning|error；debug 含逐步尝试链；ASR_LOG_LEVEL
   log_backup_days: 7         # ASR_LOG_BACKUP_DAYS
 
-ffmpeg_path: "ffmpeg"        # FFMPEG_PATH；阿里云/豆包识别前转 16kHz 单声道 PCM
+ffmpeg_path: "ffmpeg"        # FFMPEG_PATH；识别前转 16kHz 单声道 PCM（配合 audio.preprocess）
 strategy: auto               # 兼容字段，不再劫持 auto；真正策略用请求 model ID
 
 # 服务商容灾顺序（auto 用）；未列入的已启用服务商自动追加末尾
@@ -169,6 +170,22 @@ free_order: []
 cost_order: []
 speed_order: []
 accuracy_order: []
+
+# 容灾截断与冷却（auto / strategy-*；显式定点不受限）
+routing:
+  max_failover_candidates: 4
+  failover_cooldown_sec: 300
+  failover_soft_cooldown_sec: 60
+
+# 识别前统一：16k 单声道 + 裁首尾静音（失败回退原音频）
+audio:
+  preprocess: true
+  trim_silence: true
+
+# 文本出口
+text:
+  clean_punctuation: false   # 本地清洗停顿逗号/碎句号
+  smart_sentence: false      # true 时只保留阿里 streaming/realtime
 ```
 
 ## 4. 校验配置（不启动服务）
@@ -189,5 +206,6 @@ python -c "from asr_proxy.config import load_config; c=load_config(); print(c.ho
 - **服务商名写错**：`grok`（错误）→ `groq`（正确）；豆包可用 `volcengine`/`volc` 别名。
 - **服务商没启用**：先跑 `report_status.py` 确认密钥是否完备（腾讯/百度为双密钥）。
 - **Groq 识别失败**：国内需 `proxy`；SOCKS 用 `socks5h://`（本地解析 DNS 的 socks5:// 常 TLS 失败）。
-- **阿里流式断句太碎**：调大 `max_sentence_silence`（200–6000ms），或 `semantic_punctuation_enabled: true` 改语义断句。
+- **阿里流式断句太碎**：调大 `max_sentence_silence`（200–6000ms），或 `semantic_punctuation_enabled: true` / `text.smart_sentence: true` 走语义断句（后者会过滤非阿里 streaming/realtime）。
+- **长音频一次识别很慢**：本产品面向短切段；几十分钟整文件请改由客户端切片，或使用厂商异步长转写（本仓库不接）。
 - **模型 ID 语义**：`auto`=服务商容灾；`服务商/auto`=该服务商模型列表内切换；`服务商/模型`=定点调用；`strategy-cost/speed/accuracy/free(/+speed/+accuracy)`=策略路由。策略不覆盖 `auto` 与显式 ID。

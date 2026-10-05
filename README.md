@@ -1,10 +1,21 @@
 # ASR → OpenAI 兼容代理（闪电说自定义语音识别服务商）
 
-本地代理：把配置的多家语音识别接口，转化成闪电说可用的「自定义语音识别服务商」格式。
+本地代理：把多家云厂商语音识别桥接成闪电说可用的「自定义语音识别服务商」，并兼容 OpenAI Whisper 风格接口。
+
+## 产品定位（先看这个）
+
+| | 说明 |
+|---|---|
+| **主场景** | 实时语音识别类客户端（如闪电说）按静音/时长**切成短段**后，每次 HTTP 识别一段 |
+| **典型单次时长** | 数秒～约 1 分钟（由客户端切段策略决定） |
+| **不是什么** | **不是**整篇文章 / 几十分钟录音的离线长文件转写工具；不做异步任务轮询、不拼装长文稿 |
+| **交互形态** | 请求一次 → 返回该段全文（形态 A）。上游即便走 WebSocket，代理内也是收齐后再一次返回 |
+
+选型、比价与「厂商硬限能撑多长」见 [docs/asr_models_guide.md](docs/asr_models_guide.md)；协议与对接见 [docs/client_integration.md](docs/client_integration.md)。
 
 - **主入口**：`main.py`
 - **默认端口**：`8004`（可用 `ASR_PORT` 或 config 修改）
-- **模型命名**：`服务商/模型`，例如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`groq/whisper-large-v3`
+- **模型命名**：`服务商/模型`，例如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`tencent/16k_zh`
 - **`auto`**：只在服务商之间切换（每家用其优先模型），出错则试下一个；成功后下次优先从该服务商开始
 - **`服务商/auto`**（如 `aliyun/auto`、`groq/auto`）：只在该服务商的模型列表内切换；成功后下次优先从该模型开始
 - **策略模型 ID**（见「三、路由策略」）：`strategy-cost` / `strategy-speed` / `strategy-accuracy` / `strategy-free` / `strategy-free+speed` / `strategy-free+accuracy`；**不覆盖** `auto` 与显式 `服务商/模型`
@@ -17,14 +28,19 @@
 | 豆包语音（火山）1.0 / 2.0 | ✅ 已实现 | `api_key` 非空；旧版控制台还需 `app_id` |
 | 硅基流动 SenseVoice | ✅ 已实现 | `api_key` 非空（国内直连） |
 | 阶跃星辰 StepFun | ✅ 已实现 | `api_key` 非空 |
-| 腾讯云 ASR 极速版 | ✅ 已实现 | `secret_id` + `secret_key`（另需 `app_id`）；模型 `16k_zh_en` |
-| 百度智能云短语音 | ✅ 已实现 | `api_key` + `secret_key`（另需 `app_id`）；`1537` / `80001` |
+| 腾讯云 ASR | ✅ 已实现 | `secret_id` + `secret_key`（另需 `app_id`）；Flash（如 `16k_zh`）与实时（如 `realtime-16k_zh`） |
+| 百度智能云短语音 | ✅ 已实现 | `api_key` + `secret_key`（另需 `app_id`）；`1537` / `80001`（单次硬限 ≤60s） |
+
+管道能力（见 `config.example.yaml`）：
+- **音频预处理**（`audio.preprocess` / `trim_silence`）：识别前统一 16k 单声道，并可裁首尾静音
+- **容灾截断与冷却**（`routing.max_failover_candidates` 等）：`auto` / `strategy-*` 限制尝试次数，硬/软失败短时跳过
+- **文本出口**（`text.clean_punctuation` / `smart_sentence`）：可选清洗停顿标点；智能断句仅保留阿里 streaming/realtime
 
 失败时接口返回 **真实 HTTP 错误码**（如 400/502），不再用 200 + 空文本糊弄客户端。
 
 ---
 
-> 客户端对接（闪电说协议、实时 WS 与 Flash、FunASR/WhisperLive 定位、提供给其他软件时的检查清单）见 [docs/client_integration.md](docs/client_integration.md)。
+> 客户端对接（闪电说协议、切段短语音 vs 真·流式、FunASR/WhisperLive 定位、分发检查清单）见 [docs/client_integration.md](docs/client_integration.md)。
 
 ## 一、闪电说真实协议（最重要）
 
@@ -97,6 +113,22 @@ providers:
     base_url: "https://api.siliconflow.cn/v1"
     models:
       - SenseVoiceSmall
+  # tencent / baidu / stepfun 等见 config.example.yaml
+```
+
+常用管道项（默认适合短切段；完整注释见 `config.example.yaml`）：
+
+```yaml
+routing:
+  max_failover_candidates: 4      # auto / strategy-* 最多尝试几个候选
+  failover_cooldown_sec: 300
+  failover_soft_cooldown_sec: 60
+audio:
+  preprocess: true                # 识别前统一 16k 单声道
+  trim_silence: true              # 裁首尾静音
+text:
+  clean_punctuation: false        # 本地清洗停顿逗号/碎句号
+  smart_sentence: false           # true 时只保留阿里 streaming/realtime
 ```
 
 也可用环境变量（优先于 YAML）：
@@ -107,7 +139,10 @@ providers:
 | Groq | `GROQ_API_KEY`，`GROQ_BASE_URL`，`GROQ_PROXY`，`GROQ_TIMEOUT`，`GROQ_ASR_MODELS` / `GROQ_DEFAULT_MODEL` |
 | 豆包 | `DOUBAO_API_KEY` / `VOLC_API_KEY`，`DOUBAO_APP_ID` / `VOLC_APP_ID`，`DOUBAO_WS_URL`，`DOUBAO_ASR_MODELS` |
 | 硅基流动 | `SILICONFLOW_API_KEY` / `SF_API_KEY`，`SILICONFLOW_BASE_URL`，`SILICONFLOW_ASR_MODELS` |
-| 通用 | `ASR_PORT`，`ASR_LOG`，`FFMPEG_PATH`，`ASR_STRATEGY` |
+| 腾讯云 | `TENCENT_SECRET_ID`，`TENCENT_SECRET_KEY`，`TENCENT_APP_ID` |
+| 百度 | `BAIDU_API_KEY`，`BAIDU_SECRET_KEY`，`BAIDU_APP_ID` |
+| 阶跃 | `STEPFUN_API_KEY` |
+| 通用 | `ASR_PORT`，`ASR_LOG`，`ASR_LOG_LEVEL`，`FFMPEG_PATH`，`ASR_STRATEGY` |
 
 ### 3. 启动
 
@@ -121,14 +156,14 @@ python main.py
 |---|---|
 | 地址 | `http://127.0.0.1:8004` |
 | API Key | 随便填（本地无鉴权） |
-| 模型 | `auto` / `aliyun/auto` / `doubao/asr-2.0` / `siliconflow/SenseVoiceSmall` |
+| 模型 | `auto` / `strategy-speed` / `aliyun/auto` / `tencent/16k_zh` / `doubao/asr-2.0` |
 
-地址带不带 `/v1` 均可。
+地址带不带 `/v1` 均可。客户端会按静音等把麦克风流切成短段再请求；本代理按段返回文本，由客户端拼进实时翻译链路。
 
 > 注意：服务商名是 **groq**（不是 grok）。旧配置键 `grok` 会自动按 groq 加载。
 > 豆包也可写 `volcengine` / `volc`，会归一为 `doubao`。
 
-阿里云 / 豆包路径识别前用本机 `ffmpeg` 转成 **16kHz 单声道 PCM**；Groq 直接上传原始音频到上游 `/audio/transcriptions`。
+开启 `audio.preprocess` 时，识别前会统一转 **16kHz 单声道**（失败回退原音频）；阿里云 / 豆包等路径本身也依赖本机 `ffmpeg`。
 
 豆包模型与资源 ID 对应（[官方文档](https://docs.volcengine.com/docs/6561/1354869)）：
 
@@ -144,6 +179,7 @@ python main.py
 ## 三、路由策略
 
 策略以**请求模型 ID**选择，不改写 `auto`。详见 `docs/asr_models_guide.md`。
+硬限（如百度 ≤60s、Groq ≤25MB）用于排除过长/过大候选；本产品仍应按**短切段**调用，不要依赖「厂商能撑 2h」去整段转长音频。
 
 | model ID | 含义 | 行为 |
 |---|---|---|
@@ -228,8 +264,10 @@ print(requests.post('http://127.0.0.1:8004/chat/completions',json=body,timeout=9
 
 1. 闪电走 `/chat/completions` + JSON base64，不是 Whisper 的 multipart。
 2. 必须把文本放进 `choices[0].message.content`，否则报「未返回有效文本」。
-3. DashScope 的 `format`/`sample_rate` 须与音频一致，统一转 16k mono wav。
-4. `Recognition.call().get_sentence()` 可能返回 list，需遍历拼文本。
-5. Groq 在国内通常要配 `proxy`（与 `groq_proxy` 的 `GROQ_PROXY` 相同）。
-6. 豆包新版控制台只填 `api_key`；旧版需 `app_id` + Access Token。并发版资源包请用 `asr-*-concurrent`。
-7. 识别失败会返回 502，不再返回 200 + 空 `content`。
+3. 本产品面向**短切段**；不要把几十分钟整文件一次丢进来当长转写用（体感延迟、费用、硬限都不合适）。
+4. DashScope 的 `format`/`sample_rate` 须与音频一致；开预处理或走阿里/豆包时依赖 ffmpeg 转 16k mono。
+5. `Recognition.call().get_sentence()` 可能返回 list，需遍历拼文本。
+6. Groq 在国内通常要配 `proxy`（`GROQ_PROXY`）。
+7. 豆包新版控制台只填 `api_key`；旧版需 `app_id` + Access Token。并发版资源包请用 `asr-*-concurrent`。
+8. `text.smart_sentence=true` 会过滤掉腾讯/豆包/硅基等，只留阿里 streaming/realtime。
+9. 识别失败会返回 502，不再返回 200 + 空 `content`。

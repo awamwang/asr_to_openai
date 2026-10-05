@@ -6,6 +6,7 @@ description: 配置、启动与使用本项目的 ASR→OpenAI 兼容语音识�
 # ASR → OpenAI 代理：配置 / 启动 / 自启动 / 模型与接口
 
 把多厂商语音识别桥接为闪电说「自定义语音识别服务商」（`POST /chat/completions` + JSON base64）。
+**主场景**：实时翻译类客户端的短切段识别（数秒～约 1 分钟），不是几十分钟整篇录音的离线长转写。
 项目根：`G:\Projects\Tools\asr_to_openai`（本技能位于 `<root>\skills\asr-openai-proxy\`）。
 
 ## 工作流
