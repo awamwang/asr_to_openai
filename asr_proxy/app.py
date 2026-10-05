@@ -56,6 +56,19 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
     )
     # 路由层：候选链 / 逐步尝试 / 最终选用（debug 含逐步细节）
     router = ProviderRouter(cfg, log_fn=logger)
+    logger.info(
+        "text: clean_punctuation=%s smart_sentence=%s",
+        cfg.clean_punctuation, cfg.smart_sentence,
+    )
+    if cfg.smart_sentence:
+        smart = router.list_smart_sentence_models()
+        if smart:
+            logger.info("smart_sentence 可用模型: %s", smart)
+        else:
+            logger.warning(
+                "smart_sentence=true 但当前无可用模型"
+                "（需阿里云 streaming/realtime，如 qwen-audio-3.1-asr-flash-streaming）"
+            )
 
     app = FastAPI(title="ASR to OpenAI Proxy", version="1.0.0")
     app.state.cfg = cfg

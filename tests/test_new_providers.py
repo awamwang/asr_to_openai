@@ -155,9 +155,10 @@ class TestTencentFlash:
         assert duration == pytest.approx(4.0)
         assert text == "再去看一下腾讯云的具有免费额度。"
         assert len(segs) == 1
+        # smooth_spoken_text 委托 normalize（默认不洗标点，仅去标签）
         assert smooth_spoken_text(
             "我的这个项目主要，目的就是，给，一些软件。"
-        ) == "我的这个项目主要目的就是给一些软件。"
+        ) == "我的这个项目主要，目的就是，给，一些软件。"
 
     def test_keep_long_pause_sentences(self):
         sents = [

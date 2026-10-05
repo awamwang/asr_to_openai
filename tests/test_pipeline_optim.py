@@ -60,7 +60,11 @@ class TestTextutil:
 
     def test_normalize_pipeline(self):
         raw = "<|zh|>我的这个项目主要，目的就是，给。一些软件。。"
-        assert normalize_asr_text(raw) == "我的这个项目主要目的就是给一些软件。"
+        # 默认不洗标点，只去标签
+        assert normalize_asr_text(raw) == "我的这个项目主要，目的就是，给。一些软件。。"
+        assert normalize_asr_text(raw, clean_punctuation=True) == (
+            "我的这个项目主要目的就是给一些软件。"
+        )
 
 
 class TestFailoverPolicy:
@@ -124,3 +128,48 @@ class TestAudioPreprocess:
         assert name.endswith(".wav")
         assert out[:4] == b"RIFF"
         assert len(out) > 44
+
+
+class TestSmartSentence:
+    def test_list_and_filter(self):
+        from asr_proxy.strategy.metadata import supports_smart_sentence
+
+        assert supports_smart_sentence(
+            "aliyun", "qwen-audio-3.1-asr-flash-streaming",
+        )
+        assert not supports_smart_sentence("tencent", "16k_zh")
+        assert not supports_smart_sentence("aliyun", "qwen-audio-3.0-asr-flash")
+
+        cfg = AppConfig(
+            smart_sentence=True,
+            audio_preprocess=False,
+            max_failover_candidates=0,
+            auto_order=["aliyun", "tencent"],
+            providers={
+                "aliyun": ProviderConfig(
+                    name="aliyun", api_key="k",
+                    models=[
+                        "qwen-audio-3.1-asr-flash-streaming",
+                        "qwen-audio-3.0-asr-flash",
+                    ],
+                ),
+                "tencent": ProviderConfig(
+                    name="tencent",
+                    secret_id="a", secret_key="b", app_id="1",
+                    models=["16k_zh"],
+                ),
+            },
+        )
+        router = ProviderRouter(cfg)
+        assert router.list_smart_sentence_models() == [
+            "aliyun/qwen-audio-3.1-asr-flash-streaming",
+        ]
+        labels = [c.label for c in router.resolve("auto")]
+        assert labels == ["aliyun/qwen-audio-3.1-asr-flash-streaming"]
+        # strategy-free / 显式路径同样过滤
+        free = [c.label for c in router.resolve("strategy-free")]
+        assert free == ["aliyun/qwen-audio-3.1-asr-flash-streaming"]
+        assert router.resolve("tencent/16k_zh") == []
+        assert [
+            c.label for c in router.resolve("aliyun/qwen-audio-3.0-asr-flash")
+        ] == []

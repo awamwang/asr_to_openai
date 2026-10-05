@@ -15,7 +15,7 @@ _MID_PERIOD_RE = re.compile(r"(?<=[\u4e00-\u9fff])[。．.](?=[\u4e00-\u9fff])")
 
 
 def strip_model_tags(text: str) -> str:
-    """去掉模型特殊标签（SenseVoice 等）。"""
+    """去掉模型特殊标签（SenseVoice 等）。始终建议执行。"""
     return _SENSEVOICE_TAG_RE.sub("", text or "")
 
 
@@ -26,16 +26,21 @@ def strip_pause_commas(text: str) -> str:
     return text.replace("，", "").replace("、", "").replace(",", "")
 
 
-def normalize_asr_text(text: str) -> str:
-    """统一出口规范：标签 → 停顿逗号 → 碎句号 → 连续标点 → 空白。
+def normalize_asr_text(text: str, *, clean_punctuation: bool = False) -> str:
+    """统一出口：始终去模型标签；可选清洗停顿/碎句标点。
 
-    保留句末 。？！… 与英文 .?!；适合闪电说字幕/翻译，避免「主要，目的就是，给，」式碎顿。
+    clean_punctuation=False（默认）：只去 SenseVoice 等标签，保留厂商原生标点与断句。
+    clean_punctuation=True：再去停顿逗号、汉字间碎句号、压缩连续句末标点与空白。
     """
     if not text:
         return ""
     out = strip_model_tags(text)
-    out = strip_pause_commas(out)
-    out = _MID_PERIOD_RE.sub("", out)
-    out = _MULTI_END_RE.sub(r"\1", out)
-    out = _WS_RE.sub("", out)
+    if clean_punctuation:
+        out = strip_pause_commas(out)
+        out = _MID_PERIOD_RE.sub("", out)
+        out = _MULTI_END_RE.sub(r"\1", out)
+        out = _WS_RE.sub("", out)
+    else:
+        # 仅压缩多余空白，不动标点
+        out = _WS_RE.sub(" ", out)
     return out.strip()

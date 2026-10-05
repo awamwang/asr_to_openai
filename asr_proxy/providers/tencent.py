@@ -480,11 +480,7 @@ class TencentProvider(AsrProvider):
             payload,
             max_sentence_silence=self.config.max_sentence_silence,
         )
-        # 即便上游仍带回停顿逗号，本地再清一遍（filter_punc=2 时通常已无）
-        text = smooth_spoken_text(text)
-        if segments:
-            for seg in segments:
-                seg["text"] = smooth_spoken_text(str(seg.get("text") or ""))
+        # 标点清洗由路由层 text.clean_punctuation 总控，此处不再二次清洗
         if not text:
             raise AsrProviderError(
                 "返回空文本",
@@ -529,10 +525,6 @@ class TencentProvider(AsrProvider):
                 secret_key=secret_key,
                 used_model=used_model,
             )
-            text = smooth_spoken_text(text)
-            if segments:
-                for seg in segments:
-                    seg["text"] = smooth_spoken_text(str(seg.get("text") or ""))
             if not text:
                 raise AsrProviderError(
                     "返回空文本",

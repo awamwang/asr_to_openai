@@ -150,6 +150,10 @@ class AppConfig:
     audio_preprocess: bool = True
     # 预处理时裁首尾静音（依赖 ffmpeg silenceremove）
     audio_trim_silence: bool = True
+    # 本地清洗停顿/碎句标点（总控）；默认 false，保留厂商原生标点
+    clean_punctuation: bool = False
+    # 智能断句：只保留原生支持语义断句的模型（见 supports_smart_sentence）
+    smart_sentence: bool = False
 
     def enabled_providers(self) -> List[ProviderConfig]:
         """按 auto_order 返回已启用的服务商列表。"""
@@ -681,6 +685,26 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
             default=True,
         ),
     )
+    text_cfg = data.get("text") if isinstance(data.get("text"), dict) else {}
+    clean_punctuation = _bool_env(
+        "ASR_CLEAN_PUNCTUATION",
+        default=_as_bool(
+            text_cfg.get(
+                "clean_punctuation", data.get("clean_punctuation", False),
+            ),
+            default=False,
+        ),
+    )
+    smart_sentence = _bool_env(
+        "ASR_SMART_SENTENCE",
+        default=_as_bool(
+            text_cfg.get("smart_sentence", data.get("smart_sentence", False)),
+            default=False,
+        ),
+    )
+    # 开启智能断句时强制阿里流式走语义断句参数（否则过滤了模型却仍用 VAD）
+    if smart_sentence and "aliyun" in providers:
+        providers["aliyun"].semantic_punctuation_enabled = True
 
     return AppConfig(
         host=str(server.get("host") or "127.0.0.1"),
@@ -701,4 +725,6 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         failover_soft_cooldown_sec=failover_soft_cooldown_sec,
         audio_preprocess=audio_preprocess,
         audio_trim_silence=audio_trim_silence,
+        clean_punctuation=clean_punctuation,
+        smart_sentence=smart_sentence,
     )

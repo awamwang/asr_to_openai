@@ -36,11 +36,21 @@ def main() -> None:
     print(f"[asr_proxy] enabled providers: {enabled or '(none)'}")
     print(f"[asr_proxy] auto_order: {cfg.auto_order}")
     print(f"[asr_proxy] strategy models: strategy-cost/speed/accuracy/free (request as model ID)")
+    print(f"[asr_proxy] text: clean_punctuation={cfg.clean_punctuation} smart_sentence={cfg.smart_sentence}")
     print(f"[asr_proxy] log: {cfg.log_file} level={cfg.log_level} backup_days={cfg.log_backup_days}")
     if not enabled:
         print("[asr_proxy] 警告：未启用任何服务商，请在 config.yaml 或环境变量中填写 api_key")
 
     app = create_app(cfg)
+    if cfg.smart_sentence:
+        smart = app.state.router_asr.list_smart_sentence_models()
+        if smart:
+            print(f"[asr_proxy] smart_sentence 可用模型: {smart}")
+        else:
+            print(
+                "[asr_proxy] 警告：smart_sentence=true 但当前无可用模型"
+                "（需启用阿里云 streaming/realtime，如 qwen-audio-3.1-asr-flash-streaming）"
+            )
     uvicorn.run(app, host=cfg.host, port=cfg.port, log_level="info")
 
 

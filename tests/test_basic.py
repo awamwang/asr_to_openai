@@ -171,6 +171,8 @@ class TestConfig:
         assert cfg.failover_cooldown_sec == 300
         assert cfg.audio_preprocess is True
         assert cfg.audio_trim_silence is True
+        assert cfg.clean_punctuation is False
+        assert cfg.smart_sentence is False
         assert cfg.log_level == "info"
         assert cfg.log_backup_days == 7
 

@@ -23,6 +23,7 @@ from asr_proxy.strategy import (
     build_strategy,
     parse_request_strategy,
 )
+from asr_proxy.strategy.metadata import supports_smart_sentence
 from asr_proxy.textutil import normalize_asr_text
 
 # 硬失败：额度/鉴权类，冷却更长
@@ -164,6 +165,33 @@ class ProviderRouter:
             return False
         return True
 
+    def list_smart_sentence_models(self) -> List[str]:
+        """当前已启用服务商配置中、真正支持智能断句的模型 ID 列表。"""
+        out: List[str] = []
+        for p in self.enabled_list():
+            for m in (p.model_names or [p.default_model]):
+                if supports_smart_sentence(p.name, m):
+                    out.append(f"{p.name}/{m}")
+        return out
+
+    def _filter_smart_sentence(
+        self, candidates: List[RouteCandidate],
+    ) -> List[RouteCandidate]:
+        """smart_sentence 开启时只保留原生语义断句模型。"""
+        if not self.cfg.smart_sentence or not candidates:
+            return candidates
+        kept = [
+            c for c in candidates
+            if supports_smart_sentence(c.provider.name, c.model)
+        ]
+        dropped = [c.label for c in candidates if c not in kept]
+        if dropped:
+            self._log(
+                f"[recognize] smart_sentence 过滤掉({len(dropped)})={dropped}",
+                "debug",
+            )
+        return kept
+
     def _apply_failover_policy(
         self,
         candidates: List[RouteCandidate],
@@ -171,9 +199,14 @@ class ProviderRouter:
         route_mode: str,
         strategy_name: str = "",
     ) -> List[RouteCandidate]:
-        """auto / strategy-*：跳过冷却中模型，并截断候选长度。显式定点不截断。"""
+        """智能断句过滤 → 冷却跳过 → 候选截断（显式定点不截断）。"""
         if not candidates:
             return candidates
+
+        candidates = self._filter_smart_sentence(candidates)
+        if not candidates:
+            return []
+
         is_failover = route_mode in ("auto", "provider-auto") or bool(strategy_name)
         if not is_failover:
             return candidates
@@ -248,50 +281,49 @@ class ProviderRouter:
 
         duration：音频时长（秒）；file_size：字节数。策略硬限/比价需要；
         auto 与显式模型可省略。探测失败则不做对应过滤。
+        smart_sentence=true 时再过滤为原生语义断句模型。
         """
         raw = (model or "").strip()
         m = raw.lower()
         strategy = self._strategy_for_request(raw)
         if strategy is not None:
-            return self._resolve_strategy_pool(
+            out = self._resolve_strategy_pool(
                 self._providers_for_strategy(strategy),
                 duration, strategy, file_size,
             )
-
-        if not m or m == "auto":
-            return self._resolve_global_auto()
-
-        if "/" in raw:
+        elif not m or m == "auto":
+            out = self._resolve_global_auto()
+        elif "/" in raw:
             provider_name, _, rest = raw.partition("/")
             provider_name = provider_name.strip()
             rest = rest.strip()
             p = self._find_provider(provider_name)
             if not p or not p.enabled:
-                return []
-            if not rest or rest.lower() == "auto":
-                return [
+                out = []
+            elif not rest or rest.lower() == "auto":
+                out = [
                     RouteCandidate(provider=p, model=name)
                     for name in self._models_for_provider_auto(p)
                 ]
-            if p.has_model(rest):
-                # 保持配置中的原始大小写
+            elif p.has_model(rest):
                 actual = next(x for x in p.model_names if x.lower() == rest.lower())
-                return [RouteCandidate(provider=p, model=actual)]
-            # 允许未列入配置但显式指定的模型
-            return [RouteCandidate(provider=p, model=rest)]
-
-        # 兼容：仅服务商名 → 该服务商默认/上次成功模型（不切模型）
-        for p in self.enabled_list():
-            if p.name.lower() == canonical_provider_name(m):
-                return [RouteCandidate(provider=p, model=self._preferred_model(p))]
-
-        # 兼容：裸模型名 → 匹配拥有该模型的已启用服务商
-        matched: List[RouteCandidate] = []
-        for p in self.enabled_list():
-            if p.has_model(raw):
-                actual = next(x for x in p.model_names if x.lower() == m)
-                matched.append(RouteCandidate(provider=p, model=actual))
-        return matched
+                out = [RouteCandidate(provider=p, model=actual)]
+            else:
+                out = [RouteCandidate(provider=p, model=rest)]
+        else:
+            out = []
+            for p in self.enabled_list():
+                if p.name.lower() == canonical_provider_name(m):
+                    out = [RouteCandidate(provider=p, model=self._preferred_model(p))]
+                    break
+            if not out:
+                for p in self.enabled_list():
+                    if p.has_model(raw):
+                        actual = next(
+                            x for x in p.model_names if x.lower() == m
+                        )
+                        out.append(RouteCandidate(provider=p, model=actual))
+        return self._filter_smart_sentence(out)
 
     def _resolve_global_auto(self) -> List[RouteCandidate]:
         """全局 auto：只在服务商之间切换，每家用一个优先模型。"""
@@ -395,13 +427,21 @@ class ProviderRouter:
         )
         pool = [c.label for c in candidates]
         if not candidates:
-            msg = (
-                f"没有可用的 ASR 服务商（model={model!r}）。"
-                "请在 config.yaml 或环境变量中配置至少一个服务商密钥；"
-                "模型请填 groq/... / aliyun/... / doubao/... / siliconflow/... / "
-                "stepfun/... / tencent/... / baidu/... / auto，"
-                f"或策略 ID {', '.join(STRATEGY_PUBLIC_IDS)}。"
-            )
+            if self.cfg.smart_sentence:
+                msg = (
+                    f"smart_sentence=true 时无可用模型（请求 model={model!r}）。"
+                    "仅阿里云 streaming/realtime 支持原生语义断句；"
+                    "请启用并配置如 aliyun/qwen-audio-3.1-asr-flash-streaming，"
+                    "或关闭 text.smart_sentence。"
+                )
+            else:
+                msg = (
+                    f"没有可用的 ASR 服务商（model={model!r}）。"
+                    "请在 config.yaml 或环境变量中配置至少一个服务商密钥；"
+                    "模型请填 groq/... / aliyun/... / doubao/... / siliconflow/... / "
+                    "stepfun/... / tencent/... / baidu/... / auto，"
+                    f"或策略 ID {', '.join(STRATEGY_PUBLIC_IDS)}。"
+                )
             self._log(
                 f"[recognize] 识别失败 请求模型={model!r} 模式={route_mode} "
                 f"切换链=[] 原因=无可用候选",
@@ -435,7 +475,10 @@ class ProviderRouter:
                 elapsed = time.perf_counter() - t0
                 cost = _fmt_elapsed(elapsed)
                 if result and result.text:
-                    cleaned = normalize_asr_text(result.text)
+                    do_punct = bool(self.cfg.clean_punctuation)
+                    cleaned = normalize_asr_text(
+                        result.text, clean_punctuation=do_punct,
+                    )
                     if not cleaned:
                         raise AsrProviderError(
                             "清洗后为空文本",
@@ -448,6 +491,7 @@ class ProviderRouter:
                         for seg in result.segments:
                             seg["text"] = normalize_asr_text(
                                 str(seg.get("text") or ""),
+                                clean_punctuation=do_punct,
                             )
                     used_model = result.model or c.model
                     result.provider = result.provider or c.provider.name

@@ -423,6 +423,20 @@ def is_free_profile(profile: ModelProfile) -> bool:
     return profile.cost.free_tier in ("longterm", "quota")
 
 
+def supports_smart_sentence(provider: str, model: str) -> bool:
+    """是否原生支持「智能断句」（语义分段 + 标点预测）。
+
+    当前仅阿里云流式 / realtime（DashScope Recognition 的
+    semantic_punctuation_enabled）。腾讯 Flash、豆包、硅基、Groq、阶跃、百度
+    均无对等原生参数，开启 smart_sentence 后会被过滤。
+    """
+    p = (provider or "").strip().lower()
+    m = (model or "").strip().lower()
+    if p != "aliyun" or not m:
+        return False
+    return "-streaming" in m or "-realtime" in m
+
+
 def estimate_cost(profile: ModelProfile, duration: Optional[float]) -> Optional[float]:
     """按音频时长 t（秒）预估单次刊例费用（人民币）。返回 None 表示无法预估。
 

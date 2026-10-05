@@ -34,7 +34,7 @@
 
 | # | 状态 | 平台 | 模型 / 引擎 ID | 接口类型 | 免费额度 | 适合长短 | 速度等级 | 参考单价 |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 现有 | 阿里云百炼 | `qwen-audio-3.1-asr-flash-streaming`（当前主力） | 流式 WS（可整段） | 一次性：36000 秒(10h)/开通后90天 | 短–长 | S4 | 按 Token 计费：输入 6 元/百万、输出 4.5 元/百万（2026-10 价页；旧口径"按秒约 1 元/时"已失效，以控制台为准） |
+| 1 | 现有 | 阿里云百炼 | `qwen-audio-3.1-asr-flash-streaming`（语义断句主力） | 流式 WS（可整段） | 一次性：36000 秒(10h)/开通后90天 | 短–长 | S4 | 按 Token 计费：输入 6 元/百万、输出 4.5 元/百万（2026-10 价页；旧口径"按秒约 1 元/时"已失效，以控制台为准） |
 | 2 | 现有 | 阿里云百炼 | `qwen-audio-3.0-asr-flash` | 同步/非流式 | 一次性：36000 秒(10h)/90天 | 短–中 | S3 | 0.00026 元/秒（≈0.94 元/时） |
 | 3 | 现有 | 火山引擎·豆包 | `asr-2.0`（SeedASR 2.0，sauc nostream） | 非流式 WS（整段返回） | 一次性：**20 小时** | 中–长 | S3 | 4.5 元/时（流式识别2.0刊例）；按时长计费、毫秒级计量 |
 | 4 | 现有 | 硅基流动 | `FunAudioLLM/SenseVoiceSmall` | 同步 HTTP（OpenAI 兼容） | **长期免费** | 短–中（建议≤5min） | S2 | 免费 |
@@ -48,10 +48,11 @@
 
 > 备注：
 > - 序号 1（阿里 3.1 流式）2026-10 价页已改**按 Token 计费**（输入 6 元/百万、输出 4.5 元/百万），旧「千问 ASR 系列按秒计费」口径仅适用于 3.0 及更早版本；精确价格以百炼控制台为准。
+> - **闪电说 / 智能断句优势（序号 1）**：原生 `semantic_punctuation_enabled` 语义断句 + 标点预测（可产出「吗？」「。」），少靠停顿插逗号；有免费额度；噪声鲁棒。开启 `text.smart_sentence` 时，本代理**只保留**阿里 `*-streaming` / `*-realtime`。**不改变** `free_order` / `auto_order` 配置顺序——若腾讯仍排在前面且未开 smart_sentence，strategy-free 仍会先试腾讯。
 > - 豆包 `asr-2.0` 走的是 `bigmodel_nostream`（流式引擎、非流式返回），按流式语音识别计费；若要更便宜的整文件方案，可另接豆包「录音文件识别 AUC 2.0」（0.8 元/时，异步）。
 > - 百度两款为**按次**计费且单次 ≤60 秒，做长音频需先切片，或改用腾讯/阶跃。
 > - 腾讯「录音文件·大模型 2.0」（约 0.8 元/时、异步）需公网 URL，代理当前只收本地 bytes，**暂未接入**。
-> - 腾讯「实时语音识别」WebSocket：模型名 `realtime-16k_zh`（另有每月 5 小时免费包，**与极速版 Flash 5h 不共用**）；整段文件按约 1:1 实时率分片上传。标准极速引擎见序号 9，大模型 1.0 见序号 10，实时见序号 11。
+> - 腾讯「实时语音识别」WebSocket：模型名 `realtime-16k_zh`（另有每月 5 小时免费包，**与极速版 Flash 5h 不共用**）；整段文件按约 1:1 实时率分片上传。标准极速引擎见序号 9，大模型 1.0 见序号 10，实时见序号 11。腾讯 Flash **无**语义断句参数（仅有 `filter_punc`）。
 
 **计费粒度速查（2026-10 按厂商文档核实，流式/非流式均适用）：**
 
@@ -190,8 +191,26 @@ Groq 为海外高质量备选（常需代理 `127.0.0.1:7881`），可进 `strat
 - 鉴权：`Authorization: Bearer <DASHSCOPE_API_KEY>`
 - 免费额度：ASR 各模型多为 **36000 秒(10h)，开通后 90 天有效**；新用户另有 10 元免费试用（3 个月）
 - 计费：`qwen-audio-3.1-asr-flash-streaming` **按 Token 计费**（输入 6 元/百万、输出 4.5 元/百万，2026-10 价页；旧"按秒"口径已失效，以控制台为准）；老款流式/实时按音频秒计费：realtime 0.00033 元/秒，`qwen3-asr-flash` 0.00026 元/秒，filetrans 0.00022 元/秒
+- **`qwen-audio-3.1-asr-flash-streaming` 相对闪电说的优势**：原生语义断句（`semantic_punctuation_enabled`）与标点预测，适合「这两个…一样吗？简单介绍一下。」这类问句/句号断句；有额度；流式通道可整段上传。若要让 strategy-free **实际优先**用它，需自行把 `free_order` 里阿里排前，或开 `text.smart_sentence`（会过滤掉腾讯等，见下）。
 - 开通准备：阿里云账号 + 实名认证 → 开通百炼 → 建 API Key
 - 备注：项目用环境变量 `DASHSCOPE_API_KEY` / `DASHSCOPE_ASR_MODELS`
+
+### 文本出口与智能断句（`config.yaml` → `text`）
+
+| 选项 | 默认 | 作用 |
+|---|---|---|
+| `clean_punctuation` | `false` | 本地清洗停顿逗号/碎句号的**总控**。`false`=保留厂商原生标点；`true`=路由出口再清一遍 |
+| `smart_sentence` | `false` | **智能断句**：只保留原生支持语义断句的模型，**会过滤**其余候选 |
+
+**`smart_sentence: true` 会留下的模型（当前实现）：**
+
+- 仅 `aliyun/*-streaming`、`aliyun/*-realtime`（如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`aliyun/qwen-audio-3.0-asr-flash-streaming`、`aliyun/qwen3-asr-flash-realtime`）
+- 启动时打印：`smart_sentence 可用模型: [...]`（只列**已启用服务商 + 已配置 models** 中真正可用的）
+- 同时强制 `providers.aliyun.semantic_punctuation_enabled=true`
+
+**会被过滤（无对等原生语义断句 API）：** 腾讯 Flash / realtime、豆包、硅基、Groq、阶跃、百度、阿里非流式 flash 等。
+
+显式请求被过滤的模型（如 `tencent/16k_zh`）在开启后也会失败并提示关闭 `smart_sentence` 或改用阿里流式。
 
 ### 2. 火山引擎·豆包（现有）
 - 产品页：https://www.volcengine.com/product/asr
