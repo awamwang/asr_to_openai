@@ -257,11 +257,61 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
             max_bytes=_TENCENT_FLASH_MAX_BYTES,
         ),
     ),
-    ("tencent", "16k_zh_en"): _p(  # 极速版大模型1.0（无月免费额度）
+    ("tencent", "16k_zh-py"): _p(  # 中英粤标准引擎，与 16k_zh 共用 5h 包
+        "tencent", "16k_zh-PY",
+        speed=1, accuracy=3,
+        cost=_per_sec(
+            0.000861, free_tier="quota",
+            min_bill_sec=1.0,
+            max_duration=_TENCENT_FLASH_MAX_SEC,
+            max_bytes=_TENCENT_FLASH_MAX_BYTES,
+        ),
+    ),
+    ("tencent", "16k_yue"): _p(
+        "tencent", "16k_yue",
+        speed=1, accuracy=3,
+        cost=_per_sec(
+            0.000861, free_tier="quota",
+            min_bill_sec=1.0,
+            max_duration=_TENCENT_FLASH_MAX_SEC,
+            max_bytes=_TENCENT_FLASH_MAX_BYTES,
+        ),
+    ),
+    ("tencent", "16k_en"): _p(
+        "tencent", "16k_en",
+        speed=1, accuracy=3,
+        cost=_per_sec(
+            0.000861, free_tier="quota",
+            min_bill_sec=1.0,
+            max_duration=_TENCENT_FLASH_MAX_SEC,
+            max_bytes=_TENCENT_FLASH_MAX_BYTES,
+        ),
+    ),
+    ("tencent", "8k_zh"): _p(
+        "tencent", "8k_zh",
+        speed=1, accuracy=3,
+        cost=_per_sec(
+            0.000861, free_tier="quota",
+            min_bill_sec=1.0,
+            max_duration=_TENCENT_FLASH_MAX_SEC,
+            max_bytes=_TENCENT_FLASH_MAX_BYTES,
+        ),
+    ),
+    ("tencent", "8k_en"): _p(
+        "tencent", "8k_en",
+        speed=1, accuracy=3,
+        cost=_per_sec(
+            0.000861, free_tier="quota",
+            min_bill_sec=1.0,
+            max_duration=_TENCENT_FLASH_MAX_SEC,
+            max_bytes=_TENCENT_FLASH_MAX_BYTES,
+        ),
+    ),
+    ("tencent", "16k_zh_en"): _p(  # 极速版大模型1.0（无月免费额度，约 5 元/时）
         "tencent", "16k_zh_en",
         speed=1, accuracy=3,
-        cost=_per_sec(  # 3.1 元/时起；最低计费 1 秒；硬限 2h / 100MB
-            0.000861, free_tier="quota",
+        cost=_per_sec(
+            0.000861,  # 档案暂沿用标准极速刊例做比价；大模型1.0 刊例约 5 元/时
             min_bill_sec=1.0,
             max_duration=_TENCENT_FLASH_MAX_SEC,
             max_bytes=_TENCENT_FLASH_MAX_BYTES,
@@ -295,6 +345,29 @@ _ALIASES: Dict[_ProfileKey, _ProfileKey] = {
     ("doubao", "volc.bigasr.sauc.concurrent"): ("doubao", "asr-1.0-concurrent"),
     ("doubao", "volc.seedasr.sauc.concurrent"): ("doubao", "asr-2.0-concurrent"),
     ("aliyun", "qwen3-asr-flash-realtime-2025-10-27"): ("aliyun", "qwen3-asr-flash-realtime"),
+    # 腾讯极速版标准引擎（共用每月 5h 包）→ 16k_zh 档案
+    ("tencent", "16k_zh-py"): ("tencent", "16k_zh"),
+    ("tencent", "16k_en"): ("tencent", "16k_zh"),
+    ("tencent", "16k_yue"): ("tencent", "16k_zh"),
+    ("tencent", "8k_zh"): ("tencent", "16k_zh"),
+    ("tencent", "8k_en"): ("tencent", "16k_zh"),
+    ("tencent", "16k_ja"): ("tencent", "16k_zh"),
+    ("tencent", "16k_ko"): ("tencent", "16k_zh"),
+    ("tencent", "16k_vi"): ("tencent", "16k_zh"),
+    ("tencent", "16k_ms"): ("tencent", "16k_zh"),
+    ("tencent", "16k_id"): ("tencent", "16k_zh"),
+    ("tencent", "16k_fil"): ("tencent", "16k_zh"),
+    ("tencent", "16k_th"): ("tencent", "16k_zh"),
+    ("tencent", "16k_pt"): ("tencent", "16k_zh"),
+    ("tencent", "16k_tr"): ("tencent", "16k_zh"),
+    ("tencent", "16k_ar"): ("tencent", "16k_zh"),
+    ("tencent", "16k_es"): ("tencent", "16k_zh"),
+    ("tencent", "16k_hi"): ("tencent", "16k_zh"),
+    ("tencent", "16k_fr"): ("tencent", "16k_zh"),
+    ("tencent", "16k_de"): ("tencent", "16k_zh"),
+    # 极速版大模型1.0（无月免费）
+    ("tencent", "16k_multi_lang"): ("tencent", "16k_zh_en"),
+    ("tencent", "8k_zh_large"): ("tencent", "16k_zh_en"),
 }
 
 

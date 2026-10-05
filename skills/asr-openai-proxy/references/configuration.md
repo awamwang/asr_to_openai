@@ -123,7 +123,11 @@ python skills/asr-openai-proxy/scripts/report_status.py
     secret_key: "xxx"
     app_id: "125xxxxxxx"
     models:
-      - 16k_zh_en            # 录音文件识别极速版（同步，S1，30min≈10s）
+      - 16k_zh               # 中文通用（标准极速版，月 5h 包）
+      - "16k_zh-PY"          # 中英粤（同一 5h 包）
+      - 16k_en
+      - 16k_yue
+      # - 16k_zh_en          # 大模型1.0，无月免费
   ```
 - 环境变量：`TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`、`TENCENT_APP_ID`、`TENCENT_ASR_MODELS`
 

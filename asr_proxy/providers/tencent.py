@@ -2,7 +2,8 @@
 """腾讯云录音文件识别极速版（Flash）：本地上传同步返回。
 
 文档：https://cloud.tencent.com/document/product/1093/52097
-本轮仅支持 engine_type=16k_zh_en（大模型 2.0 异步需公网 URL，未接入）。
+engine_type 取自配置/请求的模型名（如 16k_zh、16k_zh-PY）。
+大模型 2.0 异步需公网 URL，未接入。
 """
 from __future__ import annotations
 
@@ -19,9 +20,10 @@ from asr_proxy.config import ProviderConfig
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.providers.errors import AsrProviderError
 
-DEFAULT_MODEL = "16k_zh_en"
+DEFAULT_MODEL = "16k_zh"
 DEFAULT_TIMEOUT = 300.0
 FLASH_HOST = "asr.cloud.tencent.com"
+_PAUSE_PUNCT = frozenset("。．.")
 
 _FORMAT_BY_EXT = {
     ".wav": "wav",
@@ -77,8 +79,56 @@ def _map_flash_code(code: int) -> str:
     return _FLASH_CODE_MAP.get(int(code), "upstream")
 
 
-def _extract_flash_text(payload: Dict[str, Any]) -> Tuple[str, float, List[dict]]:
-    """从 flash_result 提取全文、时长(秒)、segments。"""
+def _join_clauses(left: str, right: str) -> str:
+    """合并短停顿切出的两段：把停顿句号改成逗号，避免「的。这类。」式碎句。"""
+    l = (left or "").rstrip()
+    r = (right or "").lstrip()
+    if not l:
+        return r
+    if not r:
+        return l
+    if l[-1] in _PAUSE_PUNCT:
+        l = l[:-1]
+        if l and l[-1] not in "，,、；;":
+            return f"{l}，{r}"
+        return l + r
+    return l + r
+
+
+def merge_flash_sentences(
+    sentences: List[Dict[str, Any]],
+    silence_ms: int,
+) -> List[Dict[str, Any]]:
+    """按句间静音合并 sentence_list，对齐阿里云 max_sentence_silence。"""
+    if not sentences:
+        return []
+    thresh = max(0, int(silence_ms))
+    out = [dict(sentences[0])]
+    for sent in sentences[1:]:
+        prev = out[-1]
+        try:
+            gap = int(sent["start_ms"]) - int(prev["end_ms"])
+        except (TypeError, ValueError, KeyError):
+            gap = thresh + 1
+        if gap <= thresh:
+            prev["text"] = _join_clauses(
+                str(prev.get("text") or ""),
+                str(sent.get("text") or ""),
+            )
+            try:
+                prev["end_ms"] = max(int(prev["end_ms"]), int(sent["end_ms"]))
+            except (TypeError, ValueError, KeyError):
+                pass
+        else:
+            out.append(dict(sent))
+    return out
+
+
+def _extract_flash_text(
+    payload: Dict[str, Any],
+    max_sentence_silence: int = 1300,
+) -> Tuple[str, float, List[dict]]:
+    """从 flash_result 提取全文、时长(秒)、segments。有分句时按静音合并后再拼全文。"""
     duration_ms = payload.get("audio_duration") or 0
     try:
         duration = float(duration_ms) / 1000.0
@@ -95,9 +145,7 @@ def _extract_flash_text(payload: Dict[str, Any]) -> Tuple[str, float, List[dict]
     for ch in results:
         if not isinstance(ch, dict):
             continue
-        channel_text = str(ch.get("text") or "").strip()
-        if channel_text:
-            texts.append(channel_text)
+        raw_sents: List[Dict[str, Any]] = []
         for sent in ch.get("sentence_list") or []:
             if not isinstance(sent, dict):
                 continue
@@ -105,25 +153,34 @@ def _extract_flash_text(payload: Dict[str, Any]) -> Tuple[str, float, List[dict]
             if not st:
                 continue
             try:
-                start = float(sent.get("start_time") or 0) / 1000.0
-                end = float(sent.get("end_time") or 0) / 1000.0
+                start_ms = int(float(sent.get("start_time") or 0))
+                end_ms = int(float(sent.get("end_time") or 0))
             except (TypeError, ValueError):
-                start, end = 0.0, 0.0
-            segments.append({
-                "id": seg_id,
-                "start": start,
-                "end": end,
-                "text": st,
-            })
-            seg_id += 1
+                start_ms, end_ms = 0, 0
+            raw_sents.append({"text": st, "start_ms": start_ms, "end_ms": end_ms})
+        merged = merge_flash_sentences(raw_sents, max_sentence_silence)
+        if merged:
+            texts.append("".join(str(s.get("text") or "") for s in merged))
+            for s in merged:
+                segments.append({
+                    "id": seg_id,
+                    "start": float(s.get("start_ms") or 0) / 1000.0,
+                    "end": float(s.get("end_ms") or 0) / 1000.0,
+                    "text": str(s.get("text") or ""),
+                })
+                seg_id += 1
+        else:
+            channel_text = str(ch.get("text") or "").strip()
+            if channel_text:
+                texts.append(channel_text)
 
-    return " ".join(texts).strip(), duration, segments
+    return "".join(texts).strip(), duration, segments
 
 
 class TencentProvider(AsrProvider):
     """腾讯云 ASR 极速版（本地 bytes 上传）。
 
-    配置：secret_id / secret_key / app_id / models（默认 16k_zh_en）
+    配置：secret_id / secret_key / app_id / models（默认 16k_zh）
     """
 
     name = "tencent"
@@ -174,7 +231,7 @@ class TencentProvider(AsrProvider):
         used_model = (model or "").strip() or self.default_model
         if used_model != "16k_zh_en" and used_model.endswith("_2.0"):
             raise AsrProviderError(
-                "录音文件·大模型 2.0 异步需公网音频 URL，当前代理仅支持本地上传的极速版 16k_zh_en",
+                "录音文件·大模型 2.0 异步需公网音频 URL，当前代理仅支持本地上传的极速版 Flash",
                 code="upstream",
                 provider=self.name,
                 model=used_model,
@@ -183,6 +240,9 @@ class TencentProvider(AsrProvider):
 
         params = {
             "engine_type": engine_type,
+            # 签名示例中的 extra_punc=0：不额外插标点，减轻停顿处乱加句号
+            "extra_punc": 0,
+            "filter_punc": 0,
             "first_channel_only": 1,
             "secretid": secret_id,
             "speaker_diarization": 0,
@@ -250,7 +310,10 @@ class TencentProvider(AsrProvider):
                 model=used_model,
             )
 
-        text, duration, segments = _extract_flash_text(payload)
+        text, duration, segments = _extract_flash_text(
+            payload,
+            max_sentence_silence=self.config.max_sentence_silence,
+        )
         if not text:
             raise AsrProviderError(
                 "返回空文本",

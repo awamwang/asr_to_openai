@@ -415,7 +415,13 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
         models = _normalize_models(
             models=env_models or None,
             model=env_model or None,
-        ) or yaml_models or ["16k_zh_en"]
+        ) or yaml_models or ["16k_zh"]
+        yaml_silence = raw.get("max_sentence_silence")
+        yaml_silence_default = (
+            _clamp_sentence_silence(yaml_silence)
+            if yaml_silence is not None
+            else 2500
+        )
         return ProviderConfig(
             name="tencent",
             secret_id=_first_env(
@@ -438,6 +444,11 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
                 "TENCENT_TIMEOUT", "QCLOUD_TIMEOUT", default=default_timeout,
             ),
             models=models,
+            max_sentence_silence=_int_env(
+                "TENCENT_MAX_SENTENCE_SILENCE",
+                "QCLOUD_MAX_SENTENCE_SILENCE",
+                default=yaml_silence_default,
+            ),
         )
     if name == "baidu":
         env_models = _first_env("BAIDU_ASR_MODELS")
