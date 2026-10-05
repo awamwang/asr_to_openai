@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from asr_proxy.audio import probe_audio_duration
 from asr_proxy.config import AppConfig, canonical_provider_name
+from asr_proxy.logutil import as_logger
 from asr_proxy.providers.aliyun import AliyunProvider
 from asr_proxy.providers.baidu import BaiduProvider
 from asr_proxy.providers.base import AsrProvider, AsrResult
@@ -72,11 +73,11 @@ class ProviderRouter:
         self,
         cfg: AppConfig,
         providers: Optional[Dict[str, AsrProvider]] = None,
-        log_fn: Optional[Callable[[str], None]] = None,
+        log_fn: Optional[object] = None,
     ):
         self.cfg = cfg
         self.providers = providers or build_providers(cfg)
-        self._log_fn = log_fn
+        self._logger = as_logger(log_fn, level=cfg.log_level)
         # 配置里的 strategy 仅作兼容记录；真正策略由请求 model ID 决定
         self.strategy_name = (cfg.strategy or "auto").strip().lower()
         # 上次成功的服务商；下次 auto 默认从此开始
@@ -84,17 +85,12 @@ class ProviderRouter:
         # 各服务商上次成功的模型；下次 auto / 服务商/auto 默认从此开始
         self._last_model_by_provider: Dict[str, str] = {}
 
-    def set_log_fn(self, log_fn: Optional[Callable[[str], None]]) -> None:
-        """设置公共日志回调（所有服务商识别结果共用）。"""
-        self._log_fn = log_fn
+    def set_log_fn(self, log_fn: Optional[object] = None) -> None:
+        """设置公共日志（Logger 或测试回调）。"""
+        self._logger = as_logger(log_fn, level=self.cfg.log_level)
 
-    def _log(self, msg: str) -> None:
-        if self._log_fn is None:
-            return
-        try:
-            self._log_fn(msg)
-        except Exception:
-            pass
+    def _log(self, msg: str, level: str = "info") -> None:
+        getattr(self._logger, level if level != "warn" else "warning")(msg)
 
     def enabled_list(self) -> List[AsrProvider]:
         """按 auto_order 返回已启用服务商。"""
@@ -253,9 +249,24 @@ class ProviderRouter:
         try:
             ordered = strategy.rank(pool, duration, file_size)
         except NotImplementedError as e:
-            self._log(f"[resolve] 策略不可用: {e}")
+            self._log(f"[resolve] 策略不可用: {e}", "error")
             raise
         return [RouteCandidate(provider=p, model=m) for p, m in ordered]
+
+    def _route_mode(self, model: str, strategy) -> str:
+        """描述本次解析模式，便于日志阅读。"""
+        if strategy is not None:
+            return f"strategy-{strategy.name}"
+        raw = (model or "").strip()
+        m = raw.lower()
+        if not m or m == "auto":
+            return "auto"
+        if "/" in raw:
+            _, _, rest = raw.partition("/")
+            if not rest.strip() or rest.strip().lower() == "auto":
+                return "provider-auto"
+            return "explicit"
+        return "lookup"
 
     def recognize(
         self,
@@ -270,14 +281,17 @@ class ProviderRouter:
         duration: Optional[float] = None
         file_size: Optional[int] = len(audio_bytes) if audio_bytes else None
         req_strategy = self._strategy_for_request(model)
+        route_mode = self._route_mode(model, req_strategy)
         if req_strategy is not None and req_strategy.needs_duration:
             duration = probe_audio_duration(audio_bytes, self.cfg.ffmpeg_path)
             self._log(
-                f"[recognize] 策略={req_strategy.name} "
+                f"[recognize] 模式={route_mode} "
                 f"音频时长={duration if duration is not None else '未知'} "
-                f"字节={file_size if file_size is not None else '未知'}"
+                f"字节={file_size if file_size is not None else '未知'}",
+                "debug",
             )
         candidates = self.resolve(model, duration=duration, file_size=file_size)
+        chain = [c.label for c in candidates]
         if not candidates:
             msg = (
                 f"没有可用的 ASR 服务商（model={model!r}）。"
@@ -286,17 +300,24 @@ class ProviderRouter:
                 "stepfun/... / tencent/... / baidu/... / auto，"
                 f"或策略 ID {', '.join(STRATEGY_PUBLIC_IDS)}。"
             )
-            self._log(f"[recognize] 识别失败 请求模型={model!r} 跳过=['无可用候选']")
+            self._log(
+                f"[recognize] 识别失败 请求模型={model!r} 模式={route_mode} "
+                f"候选链=[] 失败链=['无可用候选']",
+                "error",
+            )
             raise RuntimeError(msg)
 
+        # INFO：完整候选链；DEBUG：再逐步记录每次尝试
         self._log(
-            f"[recognize] 请求模型={model!r} "
-            f"候选={[c.label for c in candidates]}"
+            f"[recognize] 请求模型={model!r} 模式={route_mode} 候选链={chain}",
+            "info",
         )
 
         errors: List[str] = []
         last_exc: Optional[BaseException] = None
-        for c in candidates:
+        total = len(candidates)
+        for i, c in enumerate(candidates, 1):
+            self._log(f"[recognize] 尝试[{i}/{total}] {c.label}", "debug")
             try:
                 result = c.provider.recognize(
                     audio_bytes,
@@ -311,21 +332,37 @@ class ProviderRouter:
                     used = f"{result.provider}/{used_model}"
                     self.remember_success(c.provider.name, used_model)
                     self._log(
-                        f"[recognize] 使用模型={used} "
-                        f"请求模型={model!r} "
-                        f"跳过={errors or '无'}"
+                        f"[recognize] 尝试[{i}/{total}] {c.label} → 成功",
+                        "debug",
+                    )
+                    self._log(
+                        f"[recognize] 选用={used} 请求模型={model!r} "
+                        f"模式={route_mode} 失败链={errors or '无'} "
+                        f"候选链={chain}",
+                        "info",
                     )
                     return result, errors
-                errors.append(f"{c.label}: 返回空文本")
+                err = f"{c.label}: 返回空文本"
+                errors.append(err)
+                self._log(
+                    f"[recognize] 尝试[{i}/{total}] {c.label} → 失败: 返回空文本",
+                    "debug",
+                )
             except Exception as e:
                 last_exc = e
-                errors.append(f"{c.label}: {type(e).__name__}: {e}")
+                err = f"{c.label}: {type(e).__name__}: {e}"
+                errors.append(err)
+                self._log(
+                    f"[recognize] 尝试[{i}/{total}] {c.label} → 失败: "
+                    f"{type(e).__name__}: {e}",
+                    "debug",
+                )
                 continue
 
         self._log(
-            f"[recognize] 识别失败 "
-            f"请求模型={model!r} "
-            f"跳过={errors or '无'}"
+            f"[recognize] 全部失败 请求模型={model!r} 模式={route_mode} "
+            f"失败链={errors or '无'} 候选链={chain}",
+            "error",
         )
         detail = "; ".join(errors) if errors else "unknown"
         if last_exc is not None:

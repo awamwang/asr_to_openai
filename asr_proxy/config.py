@@ -120,6 +120,10 @@ class AppConfig:
     host: str = "127.0.0.1"
     port: int = 8004
     log_file: str = "asr_proxy.log"
+    # debug | info | warning | error；debug 含逐步尝试链
+    log_level: str = "info"
+    # 按天滚动后保留的备份天数（TimedRotatingFileHandler.backupCount）
+    log_backup_days: int = 7
     ffmpeg_path: str = "ffmpeg"
     # 兼容字段：不再改写 auto。真正策略请请求模型 ID strategy-cost 等。
     strategy: str = "auto"
@@ -569,6 +573,17 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
 
     port_env = _env("ASR_PORT") or _env("DASHSCOPE_PORT")
     log_env = _env("ASR_LOG") or _env("DASHSCOPE_LOG")
+    from asr_proxy.logutil import DEFAULT_BACKUP_DAYS, normalize_log_level
+    log_level = normalize_log_level(
+        _env("ASR_LOG_LEVEL") or str(server.get("log_level") or "info"),
+    )
+    backup_raw = _env("ASR_LOG_BACKUP_DAYS") or str(
+        server.get("log_backup_days") or DEFAULT_BACKUP_DAYS
+    )
+    try:
+        log_backup_days = max(1, int(backup_raw))
+    except (TypeError, ValueError):
+        log_backup_days = DEFAULT_BACKUP_DAYS
 
     # 路由策略字段仅作兼容记录，不再改写 auto。
     # 局部导入避免 config → strategy → providers.base → config 的循环依赖。
@@ -590,6 +605,8 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         host=str(server.get("host") or "127.0.0.1"),
         port=int(port_env or server.get("port") or 8004),
         log_file=log_env or str(server.get("log_file") or "asr_proxy.log"),
+        log_level=log_level,
+        log_backup_days=log_backup_days,
         ffmpeg_path=_first_env("FFMPEG_PATH", default=str(data.get("ffmpeg_path") or "ffmpeg")),
         strategy=strategy,
         auto_order=auto_order,

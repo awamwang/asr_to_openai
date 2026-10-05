@@ -12,6 +12,12 @@ server:
   # 环境变量：ASR_PORT
   log_file: "asr_proxy.log"
   # 环境变量：ASR_LOG
+  # debug | info | warning | error（debug 含逐步尝试链）
+  log_level: "info"
+  # 环境变量：ASR_LOG_LEVEL
+  # 按天滚动，最多保留天数（历史：asr_proxy.log.YYYY-MM-DD）
+  log_backup_days: 7
+  # 环境变量：ASR_LOG_BACKUP_DAYS
 
 ffmpeg_path: "ffmpeg"
 # 环境变量：FFMPEG_PATH（阿里云 / 豆包识别前会转 16kHz 单声道 PCM）

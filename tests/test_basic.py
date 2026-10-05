@@ -161,6 +161,35 @@ class TestConfig:
         assert cfg.cost_order == []
         assert cfg.speed_order == []
         assert cfg.accuracy_order == []
+        assert cfg.log_level == "info"
+        assert cfg.log_backup_days == 7
+
+    def test_setup_logging_daily_rotation(self, tmp_path):
+        from logging.handlers import TimedRotatingFileHandler
+        from asr_proxy.logutil import LOGGER_NAME, setup_logging
+        import logging
+
+        log_path = tmp_path / "rotate.log"
+        logger = setup_logging(str(log_path), level="debug", backup_days=7)
+        assert logger.name == LOGGER_NAME
+        assert logger.level == logging.DEBUG
+        handlers = [h for h in logger.handlers if isinstance(h, TimedRotatingFileHandler)]
+        assert len(handlers) == 1
+        h = handlers[0]
+        assert h.backupCount == 7
+        assert h.when == "MIDNIGHT"
+        logger.info("hello-rotate")
+        # delay=True：首条写入后才建文件
+        assert log_path.is_file()
+        text = log_path.read_text(encoding="utf-8")
+        assert "hello-rotate" in text
+        assert "[INFO]" in text
+        # 重复 setup 不叠加 handler
+        setup_logging(str(log_path), level="info", backup_days=7)
+        logger2 = logging.getLogger(LOGGER_NAME)
+        assert len([
+            h for h in logger2.handlers if isinstance(h, TimedRotatingFileHandler)
+        ]) == 1
 
     def test_strategy_order_from_yaml(self, tmp_path):
         p = tmp_path / "cfg.yaml"
@@ -311,9 +340,31 @@ class TestAutoFailover:
                 router.recognize(wav_bytes, model="auto")
 
         joined = "\n".join(logs)
-        assert "使用模型=aliyun/" in joined
-        assert "跳过=" in joined
-        assert any("groq" in line for line in logs if "跳过=" in line)
+        assert "选用=aliyun/" in joined
+        assert "候选链=" in joined
+        assert "失败链=" in joined
+        assert "模式=auto" in joined
+        assert any("groq" in line for line in logs if "失败链=" in line)
+        assert any("尝试[" in line for line in logs)
+
+    def test_router_logs_strategy_chain(self, cfg_both_enabled, wav_bytes):
+        logs: list[str] = []
+
+        def fake_aliyun(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            return AsrResult(text="ok", provider="aliyun", model=model or "m1")
+
+        def fake_grok(self, audio_bytes, filename="audio.wav", model=None, language=None):
+            raise RuntimeError("upstream down")
+
+        router = ProviderRouter(cfg_both_enabled, log_fn=logs.append)
+        with patch.object(AliyunProvider, "recognize", fake_aliyun):
+            with patch.object(GroqProvider, "recognize", fake_grok):
+                router.recognize(wav_bytes, model="strategy-free")
+
+        joined = "\n".join(logs)
+        assert "模式=strategy-free" in joined
+        assert "候选链=" in joined
+        assert "选用=aliyun/" in joined or "选用=" in joined
 
     def test_explicit_provider_slash_model(self, cfg_both_enabled, wav_bytes):
         router = ProviderRouter(cfg_both_enabled)

@@ -11,6 +11,7 @@ from fastapi import FastAPI, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from asr_proxy.config import AppConfig, load_config
+from asr_proxy.logutil import setup_logging
 from asr_proxy.providers import ProviderRouter
 from asr_proxy.strategy import STRATEGY_PUBLIC_IDS
 
@@ -48,28 +49,29 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
     """创建 FastAPI 应用。"""
     cfg = cfg or load_config()
     log_file = _ensure_log_path(cfg.log_file)
-
-    def _log(msg: str) -> None:
-        try:
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(msg + "\n")
-        except Exception:
-            pass
-
-    # 公共路由层统一打印：使用模型 / 失败跳过（覆盖所有服务商）
-    router = ProviderRouter(cfg, log_fn=_log)
+    logger = setup_logging(
+        log_file,
+        level=cfg.log_level,
+        backup_days=cfg.log_backup_days,
+    )
+    # 路由层：候选链 / 逐步尝试 / 最终选用（debug 含逐步细节）
+    router = ProviderRouter(cfg, log_fn=logger)
 
     app = FastAPI(title="ASR to OpenAI Proxy", version="1.0.0")
     app.state.cfg = cfg
     app.state.router_asr = router
     app.state.log_file = log_file
+    app.state.log_level = cfg.log_level
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
         try:
             ct = request.headers.get("content-type")
             cl = request.headers.get("content-length")
-            _log(f"[HTTP] {request.method} {request.url.path} content-type={ct} content-length={cl}")
+            logger.debug(
+                "[HTTP] %s %s content-type=%s content-length=%s",
+                request.method, request.url.path, ct, cl,
+            )
         except Exception:
             pass
         return await call_next(request)
@@ -100,6 +102,8 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
             "cost_order": list(cfg.cost_order),
             "speed_order": list(cfg.speed_order),
             "accuracy_order": list(cfg.accuracy_order),
+            "log_level": cfg.log_level,
+            "log_backup_days": cfg.log_backup_days,
             "models": model_ids,
             "last_success": {
                 "provider": router._last_provider,
@@ -150,7 +154,10 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         audio_bytes = await file.read()
         if not audio_bytes:
             return _error_response(400, "empty audio")
-        _log(f"[transcribe] file={file.filename} bytes={len(audio_bytes)} 请求模型={model!r}")
+        logger.info(
+            f"[transcribe] file={file.filename} bytes={len(audio_bytes)} "
+            f"请求模型={model!r}"
+        )
         try:
             result, errors = router.recognize(
                 audio_bytes,
@@ -158,7 +165,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 filename=file.filename or "audio.wav",
                 language=language,
             )
-            _log(f"[transcribe] OK text={result.text!r}")
+            logger.info(f"[transcribe] OK text={result.text!r}")
             return {
                 "task": "transcribe",
                 "language": result.language,
@@ -169,7 +176,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 "model": f"{result.provider}/{result.model}" if result.model else result.provider,
             }
         except Exception as e:
-            _log(f"[transcribe] EXCEPTION {type(e).__name__}: {e}")
+            logger.error(f"[transcribe] EXCEPTION {type(e).__name__}: {e}")
             return _error_response(502, f"{type(e).__name__}: {e}")
 
     # ---- 闪电说自定义 ASR：/chat/completions + JSON base64 ----
@@ -181,20 +188,20 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
         try:
             data = json.loads(body.decode("utf-8"))
         except Exception as e:
-            _log(f"[chat] body parse error: {type(e).__name__}: {e}")
+            logger.error(f"[chat] body parse error: {type(e).__name__}: {e}")
             return _error_response(400, f"invalid JSON body: {type(e).__name__}: {e}")
 
         if not isinstance(data, dict):
             return _error_response(400, "JSON body must be an object")
 
         structure = _describe_structure(data)
-        _log("[chat] BODY_STRUCTURE:\n" + "\n".join(structure))
+        logger.debug("[chat] BODY_STRUCTURE:\n" + "\n".join(structure))
 
         model = str(data.get("model") or "auto")
         language = _extract_language(data)
         candidates = _find_audio_b64(data)
         if not candidates:
-            _log("[chat] no audio base64 found in body")
+            logger.warning("[chat] no audio base64 found in body")
             return _error_response(400, "no audio base64 found in request body")
 
         last_error = ""
@@ -204,7 +211,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 if len(audio_bytes) < 100:
                     last_error = f"candidate[{i}] audio too short ({len(audio_bytes)} bytes)"
                     continue
-                _log(
+                logger.info(
                     f"[chat] candidate[{i}] decoded bytes={len(audio_bytes)} "
                     f"请求模型={model!r} language={language!r}"
                 )
@@ -219,7 +226,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                         f"{result.provider}/{result.model}"
                         if result.model else result.provider
                     )
-                    _log(f"[chat] OK text={result.text!r}")
+                    logger.info(f"[chat] OK text={result.text!r}")
                     # 与阿里云成功路径一致：闪电说只读 choices[0].message.content
                     return {
                         "choices": [{"message": {"content": result.text}}],
@@ -229,10 +236,10 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
                 last_error = f"candidate[{i}] empty text; failover={errors}"
             except Exception as e:
                 last_error = f"{type(e).__name__}: {e}"
-                _log(f"[chat] candidate[{i}] error: {last_error}")
+                logger.warning(f"[chat] candidate[{i}] error: {last_error}")
                 continue
 
-        _log(f"[chat] recognition failed: {last_error}")
+        logger.error(f"[chat] recognition failed: {last_error}")
         return _error_response(
             502,
             last_error or "recognition produced no text",
@@ -249,7 +256,12 @@ def _try_decode_b64(s: str) -> bytes:
     return base64.b64decode(s)
 
 
-def _describe_structure(data: Any, prefix: str = "", depth: int = 0, out: Optional[List[str]] = None) -> List[str]:
+def _describe_structure(
+    data: Any,
+    prefix: str = "",
+    depth: int = 0,
+    out: Optional[List[str]] = None,
+) -> List[str]:
     """递归描述 JSON 结构，长字符串只记录长度。"""
     if out is None:
         out = []
@@ -260,7 +272,9 @@ def _describe_structure(data: Any, prefix: str = "", depth: int = 0, out: Option
                 out.append(f"{indent}{prefix}{k}: {type(v).__name__}")
                 _describe_structure(v, prefix + k + ".", depth + 1, out)
             elif isinstance(v, str) and len(v) > 2000:
-                out.append(f"{indent}{prefix}{k}: str(len={len(v)}) <可能为 base64 音频>")
+                out.append(
+                    f"{indent}{prefix}{k}: str(len={len(v)}) <可能为 base64 音频>"
+                )
             else:
                 out.append(f"{indent}{prefix}{k}: {type(v).__name__}")
     elif isinstance(data, list):
@@ -269,7 +283,9 @@ def _describe_structure(data: Any, prefix: str = "", depth: int = 0, out: Option
                 out.append(f"{indent}{prefix}[{i}]: {type(v).__name__}")
                 _describe_structure(v, prefix + f"[{i}]" + ".", depth + 1, out)
             elif isinstance(v, str) and len(v) > 2000:
-                out.append(f"{indent}{prefix}[{i}]: str(len={len(v)}) <可能为 base64 音频>")
+                out.append(
+                    f"{indent}{prefix}[{i}]: str(len={len(v)}) <可能为 base64 音频>"
+                )
             else:
                 out.append(f"{indent}{prefix}[{i}]: {type(v).__name__}")
     return out
