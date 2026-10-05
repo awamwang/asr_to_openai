@@ -14,16 +14,19 @@ import json
 import os
 import struct
 import uuid
-import wave
 from typing import Any, Dict, List, Optional, Tuple
 
 from asr_proxy.audio import cleanup, to_wav_16k_mono, write_temp_audio
 from asr_proxy.config import ProviderConfig
 from asr_proxy.providers.base import AsrProvider, AsrResult
+from asr_proxy.providers.stream_util import (
+    DEFAULT_SEGMENT_MS,
+    send_pcm_chunks,
+    wav_to_pcm_s16le,
+)
 
 DEFAULT_WS_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
 DEFAULT_TIMEOUT = 90.0
-DEFAULT_SEGMENT_MS = 200
 MODEL_NAME = "bigmodel"
 
 # 对外模型别名 → 资源 ID（X-Api-Resource-Id）
@@ -91,14 +94,6 @@ def _normalize_language(language: Optional[str]) -> str:
     if not raw or raw.lower() in ("auto", "null", "none"):
         return ""
     return _LANG_MAP.get(raw.lower(), raw)
-
-
-def _wav_to_pcm(wav_path: str) -> bytes:
-    """读取 16-bit PCM WAV，返回原始 PCM 字节。"""
-    with wave.open(wav_path, "rb") as wf:
-        if wf.getsampwidth() != 2:
-            raise RuntimeError(f"仅支持 16-bit PCM WAV，当前 sampwidth={wf.getsampwidth()}")
-        return wf.readframes(wf.getnframes())
 
 
 def _build_header(msg_type: int, flags: int, serialization: int, compression: int) -> bytes:
@@ -297,7 +292,7 @@ class DoubaoProvider(AsrProvider):
         wav = None
         try:
             wav = to_wav_16k_mono(tmp, self.ffmpeg_path)
-            pcm = _wav_to_pcm(wav)
+            pcm, _rate = wav_to_pcm_s16le(wav)
             text, segments, duration = self._recognize_ws(
                 pcm,
                 resource_id=resource_id,
@@ -381,26 +376,22 @@ class DoubaoProvider(AsrProvider):
             ws.send(_build_full_client_request(seq, full_payload), opcode=websocket.ABNF.OPCODE_BINARY)
             seq += 1
 
-            # 16kHz * 16bit * mono → 32 bytes/ms
-            segment_size = max(1, int(32 * self.segment_ms))
-            if not pcm:
+            def _send_chunk(chunk: bytes, is_last: bool) -> None:
+                nonlocal seq
                 ws.send(
-                    _build_audio_only_request(seq, b"", True),
+                    _build_audio_only_request(seq, chunk, is_last),
                     opcode=websocket.ABNF.OPCODE_BINARY,
                 )
-            else:
-                offset = 0
-                while offset < len(pcm):
-                    end = min(offset + segment_size, len(pcm))
-                    is_last = end >= len(pcm)
-                    chunk = pcm[offset:end]
-                    ws.send(
-                        _build_audio_only_request(seq, chunk, is_last),
-                        opcode=websocket.ABNF.OPCODE_BINARY,
-                    )
-                    if not is_last:
-                        seq += 1
-                    offset = end
+                if not is_last:
+                    seq += 1
+
+            send_pcm_chunks(
+                pcm,
+                _send_chunk,
+                segment_ms=self.segment_ms,
+                sample_rate=16000,
+                pace=False,
+            )
 
             while True:
                 try:

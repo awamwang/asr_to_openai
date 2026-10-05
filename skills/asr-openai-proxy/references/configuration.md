@@ -123,11 +123,12 @@ python skills/asr-openai-proxy/scripts/report_status.py
     secret_key: "xxx"
     app_id: "125xxxxxxx"
     models:
-      - 16k_zh               # 中文通用（标准极速版，月 5h 包）
-      - "16k_zh-PY"          # 中英粤（同一 5h 包）
+      - 16k_zh               # Flash 中文通用（月 5h 极速包，S1）
+      - realtime-16k_zh      # 实时 WebSocket（另计实时 5h 包）
+      - "16k_zh-PY"          # Flash 中英粤（与 16k_zh 同一 5h）
       - 16k_en
       - 16k_yue
-      # - 16k_zh_en          # 大模型1.0，无月免费
+      # - 16k_zh_en          # Flash 大模型1.0，无月免费
   ```
 - 环境变量：`TENCENT_SECRET_ID`、`TENCENT_SECRET_KEY`、`TENCENT_APP_ID`、`TENCENT_ASR_MODELS`
 

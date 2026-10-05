@@ -206,24 +206,26 @@ providers:
   # CAM 密钥：https://console.cloud.tencent.com/cam/capi
   # 鉴权：Flash HMAC-SHA1（SecretId / SecretKey / AppID）
   # 硬限：极速版 → t>2h 或文件>100MB 会被策略排除
-  # 免费：下列「标准引擎」共用「录音文件识别极速版」每月 5 小时包（不是每个引擎各 5h）
+  # 免费：标准 Flash 引擎共用「录音文件识别极速版」每月 5h（不是每个引擎各 5h）
+  #       realtime-* 共用「实时语音识别」每月 5h（与 Flash 包不共用）
   # 无月免费：16k_zh_en / 16k_multi_lang / 8k_zh_large（大模型1.0，需单独资源包或后付费）
-  # 说明：实时语音识别（WebSocket，另 5h/月）与录音文件·大模型 2.0（需公网 URL）本轮未接入
+  # 未接入：录音文件·大模型 2.0（需公网 URL）
   # tencent:
   #   secret_id: ""
   #   secret_key: ""
   #   app_id: ""
   #   models:
-  #     - 16k_zh            # 中文通用（推荐默认）
-  #     - "16k_zh-PY"       # 中英粤
-  #     - 16k_en            # 英语
-  #     - 16k_yue           # 粤语
-  #     - 8k_zh             # 中文电话
-  #     - 8k_en             # 英文电话
-  #     # 同包其他标准引擎：16k_ja / 16k_ko / 16k_vi / 16k_ms / 16k_id / 16k_fil
-  #     #                   16k_th / 16k_pt / 16k_tr / 16k_ar / 16k_es / 16k_hi / 16k_fr / 16k_de
-  #     # - 16k_zh_en       # 大模型1.0，无月免费额度
+  #     - 16k_zh              # Flash 中文通用（推荐默认，S1）
+  #     - realtime-16k_zh     # 实时 WebSocket（另计实时 5h，约 1:1）
+  #     - "16k_zh-PY"         # Flash 中英粤
+  #     - 16k_en              # Flash 英语
+  #     - 16k_yue             # Flash 粤语
+  #     - 8k_zh               # Flash 中文电话
+  #     - 8k_en               # Flash 英文电话
+  #     # 同包其他标准 Flash：16k_ja / 16k_ko / 16k_vi / …
+  #     # - 16k_zh_en         # Flash 大模型1.0，无月免费额度
   #   max_sentence_silence: 2500   # 本地合并碎句（Flash 无 VAD 参数）
+  #   filter_punc: 2               # 0不过滤 / 1句末 / 2全部（闪电说建议 2）
 
   # 百度智能云 短语音
   # 首页：https://cloud.baidu.com/product/speech.html

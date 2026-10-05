@@ -9,17 +9,27 @@ import tempfile
 from typing import Optional
 
 
-def to_wav_16k_mono(src_path: str, ffmpeg: str = "ffmpeg") -> str:
-    """用 ffmpeg 把任意音频转成 16kHz 单声道 PCM WAV，返回新临时文件路径。"""
-    dst_path = src_path + "_16k.wav"
+def to_wav_mono(
+    src_path: str,
+    sample_rate: int = 16000,
+    ffmpeg: str = "ffmpeg",
+) -> str:
+    """用 ffmpeg 把任意音频转成指定采样率单声道 PCM WAV，返回新临时文件路径。"""
+    rate = int(sample_rate or 16000)
+    dst_path = f"{src_path}_{rate}.wav"
     cmd = [
         ffmpeg, "-y", "-i", src_path,
-        "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", dst_path,
+        "-ar", str(rate), "-ac", "1", "-c:a", "pcm_s16le", dst_path,
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg convert failed: {(proc.stderr or '')[-500:]}")
     return dst_path
+
+
+def to_wav_16k_mono(src_path: str, ffmpeg: str = "ffmpeg") -> str:
+    """用 ffmpeg 把任意音频转成 16kHz 单声道 PCM WAV，返回新临时文件路径。"""
+    return to_wav_mono(src_path, sample_rate=16000, ffmpeg=ffmpeg)
 
 
 def write_temp_audio(audio_bytes: bytes, suffix: str = ".wav") -> str:

@@ -317,6 +317,14 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
             max_bytes=_TENCENT_FLASH_MAX_BYTES,
         ),
     ),
+    ("tencent", "realtime-16k_zh"): _p(  # 实时语音识别 WebSocket，另计每月 5h 包
+        "tencent", "realtime-16k_zh",
+        speed=4, accuracy=3,  # 约 1:1 实时率，整段文件端到端≈音频时长
+        cost=_per_sec(  # 刊例与标准实时相近；最低计费 1 秒
+            0.000889, free_tier="quota",  # ≈3.2 元/时
+            min_bill_sec=1.0,
+        ),
+    ),
     # 腾讯 16k_zh_en_2.0（异步大模型 2.0）需公网 URL，本轮未接入，不登记档案
     ("baidu", "1537"): _p(  # 短语音识别标准版，硬限 60s
         "baidu", "1537",
@@ -368,6 +376,12 @@ _ALIASES: Dict[_ProfileKey, _ProfileKey] = {
     # 极速版大模型1.0（无月免费）
     ("tencent", "16k_multi_lang"): ("tencent", "16k_zh_en"),
     ("tencent", "8k_zh_large"): ("tencent", "16k_zh_en"),
+    # 实时语音识别（WebSocket，另计每月 5h；与极速版 Flash 5h 不共用）
+    ("tencent", "realtime-16k_zh-py"): ("tencent", "realtime-16k_zh"),
+    ("tencent", "realtime-16k_en"): ("tencent", "realtime-16k_zh"),
+    ("tencent", "realtime-16k_yue"): ("tencent", "realtime-16k_zh"),
+    ("tencent", "realtime-8k_zh"): ("tencent", "realtime-16k_zh"),
+    ("tencent", "realtime-8k_en"): ("tencent", "realtime-16k_zh"),
 }
 
 
