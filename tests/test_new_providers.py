@@ -18,8 +18,10 @@ from asr_proxy.providers.errors import AsrProviderError
 from asr_proxy.providers.stepfun import StepFunProvider
 from asr_proxy.providers.tencent import (
     TencentProvider,
+    _extract_flash_text,
     build_flash_query,
     flash_authorization,
+    merge_flash_sentences,
 )
 
 
@@ -120,6 +122,35 @@ class TestTencentFlash:
         result = p.recognize(b"wavdata", filename="t.wav")
         assert result.text == "腾讯测试"
         assert result.duration == pytest.approx(1.5)
+        url = client.post.call_args.kwargs.get("url") or client.post.call_args[0][0]
+        assert "extra_punc=0" in url
+
+    def test_merge_short_pause_sentences(self):
+        payload = {
+            "code": 0,
+            "audio_duration": 4000,
+            "flash_result": [{
+                "text": "再去看一下。腾讯云的。具有免费额度。",
+                "channel_id": 0,
+                "sentence_list": [
+                    {"text": "再去看一下。", "start_time": 0, "end_time": 800},
+                    {"text": "腾讯云的。", "start_time": 950, "end_time": 1600},
+                    {"text": "具有免费额度。", "start_time": 1750, "end_time": 2800},
+                ],
+            }],
+        }
+        text, duration, segs = _extract_flash_text(payload, max_sentence_silence=2500)
+        assert duration == pytest.approx(4.0)
+        assert text == "再去看一下，腾讯云的，具有免费额度。"
+        assert len(segs) == 1
+
+    def test_keep_long_pause_sentences(self):
+        sents = [
+            {"text": "第一句。", "start_ms": 0, "end_ms": 500},
+            {"text": "第二句。", "start_ms": 4000, "end_ms": 4800},
+        ]
+        merged = merge_flash_sentences(sents, 2500)
+        assert len(merged) == 2
 
     def test_not_activated_4003(self):
         client = MagicMock()

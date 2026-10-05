@@ -157,6 +157,10 @@ class TestMetadata:
         assert flash.cost.min_bill_sec == 1.0
         assert flash.cost.max_duration == 2 * 3600
         assert flash.cost.max_bytes == 100 * 1024 * 1024
+        assert flash.cost.free_tier == ""
+        assert is_free_profile(get_profile("tencent", "16k_zh"))
+        assert is_free_profile(get_profile("tencent", "16k_zh-PY"))
+        assert not is_free_profile(flash)
         # 异步大模型 2.0 本轮未接入，档案已移除 → 走 unknown 回退
         async_m = get_profile("tencent", "16k_zh_en_2.0")
         assert async_m.cost.billing == "unknown"
