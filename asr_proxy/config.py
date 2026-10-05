@@ -83,7 +83,10 @@ class ProviderConfig:
     # 阿里云流式 ASR 断句：False=VAD（默认），True=语义断句
     semantic_punctuation_enabled: bool = False
     # 阿里云 VAD 静音阈值（ms），范围 [200, 6000]，默认 1300
+    # 腾讯 Flash 复用：本地合并碎句的句间静音阈值
     max_sentence_silence: int = 1300
+    # 腾讯 Flash filter_punc：0不过滤 / 1句末 / 2全部（闪电说默认 2）
+    filter_punc: int = 2
 
     @property
     def enabled(self) -> bool:
@@ -218,6 +221,14 @@ def _clamp_sentence_silence(value: Any, default: int = 1300) -> int:
     except (TypeError, ValueError):
         n = default
     return max(200, min(6000, n))
+
+
+def _clamp_filter_punc(value: Any, default: int = 2) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        n = default
+    return max(0, min(2, n))
 
 
 def _int_env(*keys: str, default: int = 1300) -> int:
@@ -422,6 +433,13 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             if yaml_silence is not None
             else 2500
         )
+        yaml_filter_punc = _clamp_filter_punc(raw.get("filter_punc"), default=2)
+        env_filter = _first_env("TENCENT_FILTER_PUNC", "QCLOUD_FILTER_PUNC")
+        filter_punc = (
+            _clamp_filter_punc(env_filter, default=yaml_filter_punc)
+            if env_filter
+            else yaml_filter_punc
+        )
         return ProviderConfig(
             name="tencent",
             secret_id=_first_env(
@@ -449,6 +467,7 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
                 "QCLOUD_MAX_SENTENCE_SILENCE",
                 default=yaml_silence_default,
             ),
+            filter_punc=filter_punc,
         )
     if name == "baidu":
         env_models = _first_env("BAIDU_ASR_MODELS")
