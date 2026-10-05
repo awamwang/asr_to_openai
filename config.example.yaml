@@ -195,9 +195,9 @@ providers:
   #     - 16k_zh_en_2.0    # 录音文件·大模型 2.0（异步，S5，0.8 元/时）
 
   # 百度智能云 短语音（拟接入）
-  # 首页：https://ai.baidu.com/tech/speech
-  # 控制台：https://console.bce.baidu.com/speech/
-  # 短语音文档：https://ai.baidu.com/ai-doc/SPEECH/Vk38lxily
+  # 首页：https://cloud.baidu.com/product/speech.html
+  # 控制台：https://console.bce.baidu.com/ai-engine/speech/overview/index
+  # 短语音文档：https://cloud.baidu.com/doc/SPEECH/s/Jlbxdezuf
   # 鉴权：AppID / API Key / Secret Key → OAuth access_token（约 30 天）
   # 免费：标准版(1537)约 200 万次；极速版(80001) 5 万次（长期有效）
   # 硬限：单次 ≤60 秒；超限会被 strategy-* 排除

@@ -243,9 +243,9 @@ Groq 为海外高质量备选（常需代理 `127.0.0.1:7881`），可进 `strat
 - 开通准备：注册 + 实名 → 控制台一键开通五子产品（自动发额度）→ [CAM 建密钥](https://console.cloud.tencent.com/cam/capi) → 免费用完**手动开后付费**或买资源包
 
 ### 7. 百度智能云（新增）
-- 语音技术首页：https://ai.baidu.com/tech/speech
-- 控制台：https://console.bce.baidu.com/speech/
-- 短语音文档：https://ai.baidu.com/ai-doc/SPEECH/Vk38lxily
+- 语音技术首页：https://cloud.baidu.com/product/speech.html
+- 控制台：https://console.bce.baidu.com/ai-engine/speech/overview/index
+- 短语音文档：https://cloud.baidu.com/doc/SPEECH/s/Jlbxdezuf
 - 鉴权：应用三件套 **AppID / API Key / Secret Key** → OAuth 换 **access_token**（约 30 天）
 - 免费额度：短语音标准版（1537）约 **200 万次**；极速版（80001）**5 万次**；均长期有效
 - 计费：标准版 0.0034 元/次起（月量大可低至 0.0011 元/次）；次数包 100 万次 2400 元；并发扩容 80 元/月或 800 元/年
@@ -261,4 +261,4 @@ Groq 为海外高质量备选（常需代理 `127.0.0.1:7881`），可进 `strat
 - 豆包语音模型/定价：https://docs.volcengine.com/docs/6561/2499930 、https://www.volcengine.com/product/asr ；豆包语音计费说明（毫秒级计量）：https://docs.volcengine.com/docs/DoubaoVoice/Billinginstructions-21?lang=zh
 - 硅基流动定价：https://siliconflow.cn/pricing
 - Groq 定价：https://groq.com/pricing
-- 百度 SPEECH 官方文档（含计费）及短语音免费额度说明
+- 百度 SPEECH 文档中心：https://cloud.baidu.com/doc/SPEECH/index.html ；短语音标准版 API：https://cloud.baidu.com/doc/SPEECH/s/Jlbxdezuf ；计费：https://cloud.baidu.com/doc/SPEECH/s/Tldjm0i4c
