@@ -9,3 +9,4 @@ venv/
 dist/
 build/
 .DS_Store
+asr_proxy.log*
