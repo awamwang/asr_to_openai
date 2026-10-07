@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -96,6 +97,8 @@ class StepFunProvider(AsrProvider):
         self.timeout = float(config.timeout or DEFAULT_TIMEOUT)
         self.proxy = normalize_proxy(config.proxy)
         self._client = client
+        # 复用同一 httpx.Client：HTTP keep-alive 连接池在客户端实例内保持
+        self._http_lock = threading.Lock()
 
     @property
     def default_model(self) -> str:
@@ -109,10 +112,15 @@ class StepFunProvider(AsrProvider):
         return f"{base}/audio/transcriptions"
 
     def _make_client(self) -> httpx.Client:
-        kwargs: Dict[str, Any] = {"timeout": self.timeout}
-        if self.proxy:
-            kwargs["proxy"] = self.proxy
-        return httpx.Client(**kwargs)
+        """惰性创建并复用同一 httpx.Client（HTTP keep-alive 连接池常驻）。"""
+        if self._client is None:
+            with self._http_lock:
+                if self._client is None:
+                    kwargs: Dict[str, Any] = {"timeout": self.timeout}
+                    if self.proxy:
+                        kwargs["proxy"] = self.proxy
+                    self._client = httpx.Client(**kwargs)
+        return self._client
 
     def recognize(
         self,
@@ -142,13 +150,9 @@ class StepFunProvider(AsrProvider):
 
         files = {"file": (safe_name, audio_bytes, content_type)}
 
-        client = self._client
-        owns_client = client is None
-        if owns_client:
-            client = self._make_client()
-        assert client is not None
+        client = self._make_client()
 
-        try:
+        with self._http_lock:
             try:
                 resp = client.post(
                     self._transcribe_url(),
@@ -163,9 +167,6 @@ class StepFunProvider(AsrProvider):
                     provider=self.name,
                     model=used_model,
                 ) from e
-        finally:
-            if owns_client:
-                client.close()
 
         body = (resp.text or "")[:500]
         if resp.status_code != 200:

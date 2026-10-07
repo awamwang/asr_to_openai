@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import threading
 import time
 from typing import Any, Dict, Optional
 
@@ -77,6 +78,8 @@ class BaiduProvider(AsrProvider):
         super().__init__(config, ffmpeg_path)
         self.timeout = float(config.timeout or DEFAULT_TIMEOUT)
         self._client = client
+        # 复用同一 httpx.Client：HTTP keep-alive 连接池在客户端实例内保持
+        self._http_lock = threading.Lock()
         self._token: str = ""
         self._token_expire_at: float = 0.0
 
@@ -85,7 +88,12 @@ class BaiduProvider(AsrProvider):
         return self.config.model or DEFAULT_MODEL
 
     def _make_client(self) -> httpx.Client:
-        return httpx.Client(timeout=self.timeout)
+        """惰性创建并复用同一 httpx.Client（HTTP keep-alive 连接池常驻）。"""
+        if self._client is None:
+            with self._http_lock:
+                if self._client is None:
+                    self._client = httpx.Client(timeout=self.timeout)
+        return self._client
 
     def _get_token(self, client: httpx.Client) -> str:
         now = time.time()
@@ -158,13 +166,9 @@ class BaiduProvider(AsrProvider):
         dev_pid = _parse_dev_pid(used_model)
         app_id = (self.config.app_id or "").strip() or "asr-proxy"
 
-        client = self._client
-        owns_client = client is None
-        if owns_client:
-            client = self._make_client()
-        assert client is not None
+        client = self._make_client()
 
-        try:
+        with self._http_lock:
             token = self._get_token(client)
             body: Dict[str, Any] = {
                 "format": "wav",
@@ -191,9 +195,6 @@ class BaiduProvider(AsrProvider):
                     provider=self.name,
                     model=used_model,
                 ) from e
-        finally:
-            if owns_client:
-                client.close()
 
         try:
             data = resp.json()
