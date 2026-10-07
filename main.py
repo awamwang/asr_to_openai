@@ -12,9 +12,15 @@ ASR → OpenAI / 闪电说兼容代理 — 主入口
   4. 闪电说面板：
        地址：http://127.0.0.1:8004
        模型：auto  （或 strategy-cost / strategy-free / aliyun/qwen-audio-3.1-asr-flash-streaming）
+
+输出当前配置下真实可用的模型 ID 列表（不启动服务）：
+  python main.py --models
+    排序：最上边为策略模型（auto + strategy-*），
+         随后按 auto_order 的服务商顺序，每家先 <服务商>/auto，再列具体模型。
 """
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -30,7 +36,21 @@ from asr_proxy.config import load_config
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="ASR → OpenAI / 闪电说兼容代理",
+    )
+    parser.add_argument(
+        "--models", "--list-models", action="store_true",
+        help="仅输出当前配置下真实可用的模型 ID 列表后退出（不启动服务）",
+    )
+    args = parser.parse_args()
+
     cfg = load_config()
+    if args.models:
+        for mid in cfg.usable_model_ids():
+            print(mid)
+        return
+
     enabled = [p.name for p in cfg.enabled_providers()]
     print(f"[asr_proxy] host={cfg.host}:{cfg.port}")
     print(f"[asr_proxy] enabled providers: {enabled or '(none)'}")

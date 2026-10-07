@@ -111,9 +111,6 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
             }
             for p in router.enabled_list()
         ]
-        model_ids = ["auto"] + list(STRATEGY_PUBLIC_IDS)
-        for p in router.enabled_list():
-            model_ids.extend(p.public_model_ids())
         return {
             "status": "ok",
             "strategy": "auto",
@@ -127,7 +124,7 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
             "accuracy_order": list(cfg.accuracy_order),
             "log_level": cfg.log_level,
             "log_backup_days": cfg.log_backup_days,
-            "models": model_ids,
+            "models": cfg.usable_model_ids(),
             "last_success": {
                 "provider": router._last_provider,
                 "models": dict(router._last_model_by_provider),
@@ -137,32 +134,23 @@ def create_app(cfg: Optional[AppConfig] = None) -> FastAPI:
     @app.get("/v1/models")
     @app.get("/models")
     async def list_models():
-        models = [{"id": "auto", "object": "model", "owned_by": "asr-proxy"}]
-        seen = {"auto"}
-        for sid in STRATEGY_PUBLIC_IDS:
-            if sid not in seen:
-                models.append({
-                    "id": sid,
-                    "object": "model",
-                    "owned_by": "asr-proxy",
-                })
-                seen.add(sid)
-        for p in router.enabled_list():
-            for mid in p.public_model_ids():
-                if mid not in seen:
-                    models.append({
-                        "id": mid,
-                        "object": "model",
-                        "owned_by": p.name,
-                    })
-                    seen.add(mid)
-            if p.name not in seen:
-                models.append({
-                    "id": p.name,
-                    "object": "model",
-                    "owned_by": p.name,
-                })
-                seen.add(p.name)
+        # 排序：策略模型最上边 → 按 auto_order 各家先裸服务商名、再 /auto、再具体模型
+        models = []
+        seen = set()
+        for mid in cfg.usable_model_ids():
+            if mid in seen:
+                continue
+            # 策略 ID（auto / strategy-*）归 asr-proxy；服务商相关 ID 归服务商（裸名即服务商本身）
+            if mid == "auto" or mid.startswith("strategy-"):
+                owned = "asr-proxy"
+            else:
+                owned = mid.split("/", 1)[0]
+            models.append({
+                "id": mid,
+                "object": "model",
+                "owned_by": owned,
+            })
+            seen.add(mid)
         return {"object": "list", "data": models}
 
     # ---- 标准 multipart 转写（兼容 OpenAI /v1/audio/transcriptions）----

@@ -18,7 +18,19 @@
 - **模型命名**：`服务商/模型`，例如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`tencent/16k_zh`
 - **`auto`**：只在服务商之间切换（每家用其优先模型），出错则试下一个；成功后下次优先从该服务商开始
 - **`服务商/auto`**（如 `aliyun/auto`、`groq/auto`）：只在该服务商的模型列表内切换；成功后下次优先从该模型开始
+- **裸服务商名**（如 `aliyun`、`tencent`）：定点调用该服务商的**优先模型**（上次成功模型 > 配置列表首项），只试这一个、失败即整体失败，**不做**服务商内模型切换——等价于 `服务商/<上次成功模型>` 的简写，不是 `服务商/auto`
 - **策略模型 ID**（见「三、路由策略」）：`strategy-cost` / `strategy-speed` / `strategy-accuracy` / `strategy-free` / `strategy-free+speed` / `strategy-free+accuracy`；**不覆盖** `auto` 与显式 `服务商/模型`
+
+**裸服务商名 vs `服务商/auto` 怎么选**：
+
+| 想做什么 | 用哪个 | 行为 |
+|---|---|---|
+| 固定用某家最优模型（上次成功 / 默认首项），失败不换模型 | **裸名**（`aliyun`） | 只试优先模型 1 个，失败即报错 |
+| 在某家内部做模型容灾（首模型失败自动换下一模型） | **`服务商/auto`**（`aliyun/auto`） | 按「上次成功 → 列表顺序」轮转，失败换下一个 |
+| 跨服务商容灾（一家挂整体换下一家） | **`auto`** | 按 `auto_order` 换服务商，每家只试其优先模型 |
+| 全池按费用/速度/准确度/免费排序选最优 | **`strategy-*`** | 见「三、路由策略」 |
+
+> 一句话记忆：**裸名 = 认死一家不换模型；`服务商/auto` = 一家内部换模型；`auto` = 换服务商；`strategy-*` = 全局按指标挑**。
 
 当前能力：
 | 服务商 | 状态 | 启用条件 |
@@ -226,9 +238,19 @@ python main.py
 ## 四、接口清单
 
 - `GET /health`：查看已启用服务商、模型列表、上次成功记录
-- `GET /v1/models`：列出 `auto`、策略 ID、`服务商/auto` 及全部 `服务商/模型`
+- `GET /v1/models`：列出 `auto`、策略 ID、各服务商裸名、`服务商/auto` 及全部 `服务商/模型`（排序：策略最上边 → 按 auto_order 每家先裸名再 `/auto` 再具体模型）
 - `POST /chat/completions`（`/v1/...`）：闪电说主路径，JSON base64 音频 → `choices[0].message.content`
 - `POST /audio/transcriptions`（`/v1/...`）：标准 multipart 兼容，返回 verbose_json
+
+### 查看可用模型 ID（CLI）
+
+不启动服务，直接输出当前配置下**真实可用**的模型 ID 列表（读取实际 config.yaml + 环境变量，密钥完备才算启用）：
+
+```powershell
+python main.py --models        # 或 --list-models
+```
+
+输出顺序：最上边为策略模型（`auto` + `strategy-cost/speed/accuracy/free/free+speed/free+accuracy`），随后按 `auto_order` 的服务商顺序，每家依次列**裸服务商名**（定点优先模型）→ `服务商/auto` → 具体模型 `服务商/模型`。
 
 ---
 

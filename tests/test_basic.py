@@ -312,6 +312,83 @@ class TestConfig:
         assert cfg.enabled_providers() == []
 
 
+class TestUsableModelIds:
+    """usable_model_ids()：策略模型最上边 → 按 auto_order 每家先裸名、再 /auto、再具体模型。"""
+
+    def test_strategy_first_then_provider_auto_then_models(self, cfg_both_enabled):
+        from asr_proxy.strategy import STRATEGY_PUBLIC_IDS
+
+        ids = cfg_both_enabled.usable_model_ids()
+        # 最上边：auto + 策略模型
+        assert ids[: 1 + len(STRATEGY_PUBLIC_IDS)] == ["auto"] + list(STRATEGY_PUBLIC_IDS)
+        # auto_order = [groq, aliyun]：先裸名 groq → groq/auto → groq 具体模型，随后 aliyun
+        tail = ids[1 + len(STRATEGY_PUBLIC_IDS):]
+        assert tail == [
+            "groq",
+            "groq/auto",
+            "groq/whisper-large-v3",
+            "groq/whisper-large-v3-turbo",
+            "aliyun",
+            "aliyun/auto",
+            "aliyun/qwen-audio-3.1-asr-flash-streaming",
+            "aliyun/qwen3-asr-flash-realtime",
+        ]
+
+    def test_disabled_provider_excluded(self, cfg_aliyun_only):
+        from asr_proxy.strategy import STRATEGY_PUBLIC_IDS
+
+        ids = cfg_aliyun_only.usable_model_ids()
+        assert ids[0] == "auto"
+        assert "strategy-cost" in ids
+        # groq 未启用（无密钥）：不出现
+        assert not any(i.startswith("groq") for i in ids)
+        assert "aliyun" in ids
+        assert "aliyun/auto" in ids
+        # auto+策略+aliyun裸名+aliyun/auto+2模型
+        assert len(ids) == 1 + len(STRATEGY_PUBLIC_IDS) + 1 + 1 + 2
+
+    def test_provider_not_in_auto_order_appended(self):
+        cfg = AppConfig(
+            auto_order=["aliyun"],
+            providers={
+                "aliyun": ProviderConfig(name="aliyun", api_key="sk-a", models=["m1"]),
+                "baidu": ProviderConfig(
+                    name="baidu", api_key="ak", secret_key="sk", models=["1537", "80001"],
+                ),
+            },
+        )
+        ids = cfg.usable_model_ids()
+        assert ids[-4:] == ["baidu", "baidu/auto", "baidu/1537", "baidu/80001"]
+        # aliyun 在 auto_order 里，排在 baidu 之前
+        assert ids.index("aliyun/auto") < ids.index("baidu/auto")
+
+    def test_smart_sentence_filters_unsupported(self):
+        cfg = AppConfig(
+            smart_sentence=True,
+            auto_order=["aliyun", "tencent"],
+            providers={
+                "aliyun": ProviderConfig(
+                    name="aliyun",
+                    api_key="sk-a",
+                    models=[
+                        "qwen-audio-3.1-asr-flash-streaming",
+                        "qwen-audio-3.0-asr-flash",
+                    ],
+                ),
+                "tencent": ProviderConfig(
+                    name="tencent", secret_id="a", secret_key="b", models=["16k_zh"],
+                ),
+            },
+        )
+        ids = cfg.usable_model_ids()
+        # tencent 无智能断句模型 → 整段跳过（含裸名 tencent、tencent/auto）
+        assert not any(i.startswith("tencent") for i in ids)
+        # aliyun 只保留 streaming/realtime；裸名与 /auto 照常列出
+        assert "aliyun" in ids
+        assert "aliyun/qwen-audio-3.1-asr-flash-streaming" in ids
+        assert "aliyun/qwen-audio-3.0-asr-flash" not in ids
+
+
 class TestAudioHelpers:
     def test_find_audio_in_shandianshuo_body(self, wav_bytes):
         b64 = base64.b64encode(wav_bytes).decode()

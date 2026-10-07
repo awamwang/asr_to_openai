@@ -11,7 +11,8 @@
   1. 配置来源（config.yaml 或回退到 config.example.yaml）
   2. 监听地址（host:port，可用环境变量覆盖）
   3. 已启用服务商及其配置的模型列表（密钥完备才算启用）
-  4. 全部可用模型 ID（auto / strategy-* / 服务商/模型 / 服务商/auto）
+  4. 全部可用模型 ID（最上边为 auto / strategy-*，随后按 auto_order
+     每家先 <服务商>/auto 再具体模型）
   5. 本地服务启动后的接口路径
 """
 from __future__ import annotations
@@ -26,7 +27,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from asr_proxy.config import DEFAULT_CONFIG_PATH, EXAMPLE_CONFIG_PATH, load_config  # noqa: E402
-from asr_proxy.strategy import STRATEGY_PUBLIC_IDS  # noqa: E402
 
 
 def collect() -> dict:
@@ -42,17 +42,9 @@ def collect() -> dict:
             "default_model_id": f"{p.name}/{p.model}",
         })
 
-    model_ids = ["auto"] + list(STRATEGY_PUBLIC_IDS)
-    for p in enabled:
-        if p.name not in model_ids:
-            model_ids.append(p.name)  # 裸服务商名 → 该服务商默认模型
-        for m in p.models:
-            mid = f"{p.name}/{m}"
-            if mid not in model_ids:
-                model_ids.append(mid)
-        pauto = f"{p.name}/auto"
-        if pauto not in model_ids:
-            model_ids.append(pauto)
+    # 排序：最上边为策略模型（auto + strategy-*），
+    # 随后按 auto_order 的服务商顺序，每家先 <服务商>/auto，再列具体模型。
+    model_ids = cfg.usable_model_ids()
 
     base = f"http://{cfg.host}:{cfg.port}"
     return {

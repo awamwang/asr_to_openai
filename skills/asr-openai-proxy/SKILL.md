@@ -40,24 +40,39 @@ python main.py          # 前台启动；验证 curl.exe http://127.0.0.1:8004/h
 3. **nssm 注册为系统服务**（最稳：开机即服务、无需登录、崩溃自动重启）——命令见 `references/startup.md`。
 4. 注意：本地服务无鉴权，`server.host` 默认 `127.0.0.1`，不要随意暴露到局域网。
 
-### 4. 输出可用模型 ID 与接口路径（跑脚本，读真实配置）
+### 4. 输出可用模型 ID 与接口路径（跑脚本 / CLI，读真实配置）
 
 ```powershell
 python G:\Projects\Tools\asr_to_openai\skills\asr-openai-proxy\scripts\report_status.py
 # 或 --json
 ```
 
-脚本读取实际 `config.yaml`（含环境变量覆盖），输出：
+也可用主入口 CLI（输出可用模型 ID 列表后退出，不启动服务）：
+```powershell
+cd G:\Projects\Tools\asr_to_openai
+python main.py --models        # 别名 --list-models
+```
+
+脚本/CLI 读取实际 `config.yaml`（含环境变量覆盖），输出：
 - 配置来源、监听地址（`http://host:port`）；
 - **已启用服务商**及其模型列表（密钥完备才算启用）；
-- **可用模型 ID**：`auto`、`strategy-cost/speed/accuracy/free/free+speed/free+accuracy`、裸服务商名、`服务商/auto`、全部 `服务商/模型`；
+- **可用模型 ID**（排序：最上边为 `auto`、`strategy-cost/speed/accuracy/free/free+speed/free+accuracy`，随后按 `auto_order` 的服务商顺序，每家依次列裸服务商名、`服务商/auto`、全部 `服务商/模型`）；
 - **接口路径**：`GET /health`、`GET /v1/models`（别名 `/models`）、`POST /v1/audio/transcriptions`（别名 `/audio/transcriptions`，multipart）、`POST /v1/chat/completions`（别名 `/chat/completions`，闪电说主路径）。
 
 模型 ID 语义（用于请求 `model` 字段）：
 - `auto`：服务商容灾切换（按 `auto_order` + 上次成功优先）
-- `服务商/auto`：只在该服务商 models 列表内切换
+- **裸服务商名**（如 `aliyun`）：定点调用该服务商「优先模型」（上次成功 > 配置首项），只试一个、失败即整体失败，不做服务商内切换；等价于 `服务商/<优先模型>` 的简写，**不是** `服务商/auto`
+- `服务商/auto`：只在该服务商 models 列表内切换（上次成功模型开始轮转）
 - `服务商/模型`：定点调用（如 `aliyun/qwen-audio-3.1-asr-flash-streaming`）
 - `strategy-cost`：费用优先（刊例价）；`strategy-speed`/`strategy-accuracy`：速度/准确度；`strategy-free(/+speed/+accuracy)`：免费/额度候选。策略**不覆盖** auto 与显式 ID。
+
+**裸服务商名 vs `服务商/auto` 怎么选**：
+- 认死一家不换模型 → **裸名**（`aliyun`）；失败即报错，不换模型
+- 一家内部做模型容灾（首模型失败自动换下一个）→ **`服务商/auto`**（`aliyun/auto`）
+- 跨服务商容灾 → **`auto`**
+- 全局按指标挑最优 → **`strategy-cost/speed/accuracy/free(/+speed/+accuracy)`**
+
+> 一句话记忆：裸名 = 认死一家不换模型；`服务商/auto` = 一家内部换模型；`auto` = 换服务商；`strategy-*` = 全局按指标挑。
 
 闪电说面板填写：地址 `http://127.0.0.1:8004`（带不带 `/v1` 均可），API Key 随便填，模型用上面脚本输出的 ID。
 

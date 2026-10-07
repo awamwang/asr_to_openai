@@ -179,6 +179,36 @@ class AppConfig:
                 seen.add(name)
         return result
 
+    def usable_model_ids(self) -> List[str]:
+        """返回当前配置下真实可用、有序的模型 ID 列表。
+
+        排序规则：
+          1. 最上边：策略模型（auto + strategy-cost/speed/accuracy/free/free+speed/free+accuracy）
+          2. 随后按 auto_order 的服务商顺序，每家依次列：
+             - 裸服务商名 <服务商>：定点调用该服务商「优先模型」（上次成功 > 配置首项），只试一个
+             - <服务商>/auto：该服务商 models 列表内切换（上次成功开始轮转）
+             - 具体模型 <服务商>/<模型>
+        只包含已启用（密钥完备）的服务商；smart_sentence=true 时进一步
+        过滤为仅剩原生支持语义断句的模型（与路由行为一致）。
+        """
+        from asr_proxy.strategy import STRATEGY_PUBLIC_IDS  # 局部导入避免循环依赖
+        from asr_proxy.strategy.metadata import supports_smart_sentence
+
+        ids: List[str] = ["auto"] + list(STRATEGY_PUBLIC_IDS)
+        for p in self.enabled_providers():
+            models = list(p.models)
+            if self.smart_sentence:
+                models = [
+                    m for m in models if supports_smart_sentence(p.name, m)
+                ]
+                if not models:
+                    # smart_sentence 开启且无幸存模型：裸名/provider/auto 也会被过滤为空，跳过
+                    continue
+            ids.append(p.name)  # 裸服务商名：定点调用该服务商优先模型
+            ids.append(f"{p.name}/auto")
+            ids.extend(f"{p.name}/{m}" for m in models)
+        return ids
+
     def order_for_strategy(self, strategy_name: str) -> List[str]:
         """返回策略专用服务商顺序。
 

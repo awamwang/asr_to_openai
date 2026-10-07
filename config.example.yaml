@@ -31,7 +31,15 @@ ffmpeg_path: "ffmpeg"
 # 真正策略请在请求里填模型 ID：
 #   auto                              服务商容灾（按 auto_order + 上次成功）
 #   服务商/auto                       只在该服务商 models 列表内切换
+#   服务商名（裸名，如 aliyun）       定点调用该服务商「优先模型」（上次成功 > 配置首项），
+#                                     只试一个、失败即整体失败，不做服务商内切换；
+#                                     等价于 服务商/<优先模型> 的简写，不是 服务商/auto
 #   服务商/模型名                     定点调用
+#   ── 怎么选 ──
+#     想认死一家不换模型         → 裸名（aliyun）
+#     想在一家内部做模型容灾     → 服务商/auto（aliyun/auto）
+#     想跨服务商容灾             → auto
+#     想全局按指标挑最优         → strategy-cost/speed/accuracy/free(/+speed/+accuracy)
 #   strategy-cost                     费用优先（刊例价；美元按 1 USD=7 CNY 粗算）
 #   strategy-speed                    速度优先（静态 S1→S5）
 #   strategy-accuracy                 准确度优先（静态等级）
