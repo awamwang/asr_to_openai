@@ -16,6 +16,7 @@ import hmac
 import json
 import os
 import random
+import threading
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -320,6 +321,8 @@ class TencentProvider(AsrProvider):
         super().__init__(config, ffmpeg_path)
         self.timeout = float(config.timeout or DEFAULT_TIMEOUT)
         self._client = client
+        # 复用同一 httpx.Client：HTTP keep-alive 连接池在客户端实例内保持
+        self._http_lock = threading.Lock()
         self.segment_ms = int(segment_ms or DEFAULT_SEGMENT_MS)
         self.pace_realtime = bool(pace_realtime)
         self._sleep_fn = sleep_fn
@@ -329,7 +332,12 @@ class TencentProvider(AsrProvider):
         return self.config.model or DEFAULT_MODEL
 
     def _make_client(self) -> httpx.Client:
-        return httpx.Client(timeout=self.timeout)
+        """惰性创建并复用同一 httpx.Client（HTTP keep-alive 连接池常驻）。"""
+        if self._client is None:
+            with self._http_lock:
+                if self._client is None:
+                    self._client = httpx.Client(timeout=self.timeout)
+        return self._client
 
     def _require_creds(self) -> Tuple[str, str, str]:
         if not self.enabled:
@@ -425,25 +433,17 @@ class TencentProvider(AsrProvider):
             "Content-Type": "application/octet-stream",
         }
 
-        client = self._client
-        owns_client = client is None
-        if owns_client:
-            client = self._make_client()
-        assert client is not None
-
+        client = self._make_client()
         try:
-            try:
+            with self._http_lock:
                 resp = client.post(url, headers=headers, content=audio_bytes)
-            except httpx.RequestError as e:
-                raise AsrProviderError(
-                    f"Flash 请求失败: {type(e).__name__}: {e}",
-                    code="upstream",
-                    provider=self.name,
-                    model=used_model,
-                ) from e
-        finally:
-            if owns_client:
-                client.close()
+        except httpx.RequestError as e:
+            raise AsrProviderError(
+                f"Flash 请求失败: {type(e).__name__}: {e}",
+                code="upstream",
+                provider=self.name,
+                model=used_model,
+            ) from e
 
         try:
             payload = resp.json()

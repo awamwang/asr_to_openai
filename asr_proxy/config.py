@@ -90,6 +90,11 @@ class ProviderConfig:
     filter_punc: int = 0
     # 豆包 enable_punc：是否让上游打标点（由全局 text.clean_punctuation 映射）
     enable_punc: bool = True
+    # 连接预热：识别成功后后台保持 1 个已连接未使用的 WS，供下次请求复用
+    # （把建连移出关键路径；仅 WS 型服务商消费该字段）
+    warm: bool = True
+    # 预热连接空闲超过此时长视为失效（服务端可能已断开），秒
+    warm_ttl: float = 20.0
 
     @property
     def enabled(self) -> bool:
@@ -412,6 +417,10 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
                 "DOUBAO_TIMEOUT", "VOLC_TIMEOUT", default=default_timeout,
             ),
             models=models,
+            warm=bool(raw.get("warm", True)),
+            warm_ttl=float(
+                raw.get("warm_ttl") if raw.get("warm_ttl") is not None else 20.0
+            ),
         )
     if name in ("siliconflow", "silicon", "sf"):
         env_models = _first_env(

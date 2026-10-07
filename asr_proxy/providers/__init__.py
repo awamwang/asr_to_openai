@@ -498,6 +498,11 @@ class ProviderRouter:
                     result.model = used_model
                     used = f"{result.provider}/{used_model}"
                     self.remember_success(c.provider.name, used_model)
+                    # 预热：保持「上次使用的接口」所需连接（WS 型建连、HTTP 型 keep-alive）
+                    try:
+                        c.provider.keep_warm()
+                    except Exception:
+                        pass
                     switch_steps.append(f"{used}(成功 {cost})")
                     total_cost = _fmt_elapsed(time.perf_counter() - t_all)
                     self._log(

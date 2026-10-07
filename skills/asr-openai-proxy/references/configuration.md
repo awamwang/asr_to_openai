@@ -63,6 +63,11 @@ python skills/asr-openai-proxy/scripts/report_status.py
     app_id: ""                # 旧版控制台才填
     base_url: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
     timeout: 90
+    # 连接预热（保持「上次使用的接口」的连接）：
+    warm: true                # 成功后后台保持 1 个已连接未使用的 WS 供下次复用
+                              # （WS 收完 is_last 即断、不支持会话复用；预热把
+                              #  connect ~0.3s 移出关键路径）
+    warm_ttl: 20              # 预热连接空闲超过此时长视为失效（秒）
     models:
       - asr-2.0               # → volc.seedasr.sauc.duration（SeedASR 2.0）
       - asr-1.0               # → volc.bigasr.sauc.duration

@@ -86,3 +86,12 @@ class AsrProvider(ABC):
     ) -> AsrResult:
         """识别音频字节，成功返回 AsrResult，失败抛出异常。"""
         raise NotImplementedError
+
+    def keep_warm(self) -> None:
+        """路由在识别成功后调用：保持「上次使用的接口」所需连接。
+
+        默认不做事；WS 型服务商（如豆包）可在这里后台保持一个已连接
+        未使用的连接，把建连移出下次请求的关键路径；HTTP 型服务商
+        （如腾讯 Flash）通过常驻 httpx.Client 天然复用 keep-alive。
+        """
+        return

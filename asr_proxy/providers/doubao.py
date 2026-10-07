@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import gzip
 import json
+import queue
 import struct
+import threading
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -250,6 +253,16 @@ class DoubaoProvider(AsrProvider):
         self.ws_url = (config.base_url or DEFAULT_WS_URL).strip() or DEFAULT_WS_URL
         self.app_id = (getattr(config, "app_id", None) or config.workspace_id or "").strip()
         self.segment_ms = DEFAULT_SEGMENT_MS
+        # 连接预热：保持「上次使用的接口」的连接，把建连移出下次请求的关键路径。
+        # 豆包 WS 协议不提供连接复用（收完 is_last 服务端即断开），因此只能力求
+        # 「后台常驻 1 个已连接未使用的 WS」，请求取用、用后关闭、后台补建。
+        self.warm_enabled = bool(getattr(config, "warm", True))
+        self.warm_ttl = float(getattr(config, "warm_ttl", 0) or 20.0)
+        self._warm_pool: "queue.Queue" = queue.Queue(maxsize=1)
+        self._warm_lock = threading.Lock()
+        self._warmer_alive = False
+        # 上次成功识别的资源 ID（预热连接按它建连，模型与连接绑定）
+        self._last_resource_id = "volc.bigasr.sauc.duration"
 
     @property
     def default_model(self) -> str:
@@ -302,6 +315,89 @@ class DoubaoProvider(AsrProvider):
             model=used_model,
         )
 
+    def _connect_ws(self, resource_id: str):
+        """建立豆包 WebSocket 连接（鉴权头 + 资源 ID）。失败抛 RuntimeError。"""
+        import websocket
+        connect_id = str(uuid.uuid4())
+        headers = self._auth_headers(connect_id)
+        headers["X-Api-Resource-Id"] = resource_id
+        # websocket-client 要求 list["Key: Value"]
+        header_list = [f"{k}: {v}" for k, v in headers.items()]
+        try:
+            return websocket.create_connection(
+                self.ws_url,
+                header=header_list,
+                timeout=self.timeout,
+                enable_multithread=True,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"豆包 ASR WebSocket 连接失败: {type(e).__name__}: {e}"
+            ) from e
+
+    # ── 连接预热池 ────────────────────────────────────────────────────
+    def keep_warm(self) -> None:
+        """识别成功后调用：后台补建 1 个已连接未使用的 WS，供下次复用。
+
+        池满/已有预热线程在跑时直接返回；建连失败静默放弃（下次请求时
+        再走正常建连路径），不阻塞调用方。
+        """
+        if not self.warm_enabled:
+            return
+        if self._warm_pool.full():
+            return
+        with self._warm_lock:
+            if self._warmer_alive:
+                return
+            self._warmer_alive = True
+        threading.Thread(
+            target=self._warm_worker, daemon=True, name="doubao-warm"
+        ).start()
+
+    def _warm_worker(self) -> None:
+        try:
+            try:
+                ws = self._connect_ws(self._last_resource_id)
+            except Exception:
+                return
+            try:
+                ws._warm_ts = time.monotonic()
+                ws._warm_resource = self._last_resource_id
+                try:
+                    self._warm_pool.put_nowait(ws)
+                except queue.Full:
+                    self._close_ws(ws)
+            except Exception:
+                self._close_ws(ws)
+        finally:
+            with self._warm_lock:
+                self._warmer_alive = False
+
+    def _take_warm_ws(self, resource_id: str):
+        """从池中取预热连接；无效（资源不符/空闲过久/被服务端断开）则丢弃返回 None。"""
+        if not self.warm_enabled:
+            return None
+        try:
+            ws = self._warm_pool.get_nowait()
+        except queue.Empty:
+            return None
+        if getattr(ws, "_warm_resource", None) != resource_id:
+            self._close_ws(ws)
+            return None
+        if self.warm_ttl > 0:
+            ts = getattr(ws, "_warm_ts", 0) or 0
+            if time.monotonic() - ts > self.warm_ttl:
+                self._close_ws(ws)
+                return None
+        return ws
+
+    @staticmethod
+    def _close_ws(ws) -> None:
+        try:
+            ws.close()
+        except Exception:
+            pass
+
     def _recognize_ws(
         self,
         pcm: bytes,
@@ -315,116 +411,124 @@ class DoubaoProvider(AsrProvider):
                 "缺少依赖 websocket-client，请执行: pip install websocket-client"
             ) from e
 
-        connect_id = str(uuid.uuid4())
-        headers = self._auth_headers(connect_id)
-        headers["X-Api-Resource-Id"] = resource_id
-        # websocket-client 要求 list["Key: Value"]
-        header_list = [f"{k}: {v}" for k, v in headers.items()]
+        self._last_resource_id = resource_id
+        # 预热连接可能已被服务端空闲断开：失败时重建一次再跑，避免整个请求失败
+        for attempt in (0, 1):
+            ws = self._take_warm_ws(resource_id)
+            if ws is None:
+                ws = self._connect_ws(resource_id)
+            try:
+                return self._run_ws_session(ws, pcm, language)
+            except (
+                websocket.WebSocketConnectionClosedException,
+                ConnectionError,
+                OSError,
+                websocket.WebSocketTimeoutException,
+            ) as e:
+                self._close_ws(ws)
+                if attempt == 0:
+                    continue
+                raise RuntimeError(
+                    f"豆包 ASR WebSocket 会话失败: {type(e).__name__}: {e}"
+                ) from e
+            finally:
+                self._close_ws(ws)
 
-        try:
-            ws = websocket.create_connection(
-                self.ws_url,
-                header=header_list,
-                timeout=self.timeout,
-                enable_multithread=True,
-            )
-        except Exception as e:
-            raise RuntimeError(
-                f"豆包 ASR WebSocket 连接失败: {type(e).__name__}: {e}"
-            ) from e
+    def _run_ws_session(
+        self,
+        ws,
+        pcm: bytes,
+        language: str,
+    ) -> Tuple[str, List[dict], float]:
+        """在已建立的 WS 连接上完成一次 nostream 识别会话。"""
+        import websocket
 
         final_text = ""
         final_segments: List[dict] = []
         final_duration = 0.0
         seen_last = False
 
-        try:
-            audio_cfg: Dict[str, Any] = {
-                "format": "pcm",
-                "codec": "raw",
-                "rate": 16000,
-                "bits": 16,
-                "channel": 1,
-            }
-            # language 仅 nostream 支持
-            if language and "nostream" in self.ws_url.lower():
-                audio_cfg["language"] = language
+        audio_cfg: Dict[str, Any] = {
+            "format": "pcm",
+            "codec": "raw",
+            "rate": 16000,
+            "bits": 16,
+            "channel": 1,
+        }
+        # language 仅 nostream 支持
+        if language and "nostream" in self.ws_url.lower():
+            audio_cfg["language"] = language
 
-            full_payload = {
-                "user": {"uid": "asr-proxy"},
-                "audio": audio_cfg,
-                "request": {
-                    "model_name": MODEL_NAME,
-                    "enable_itn": True,
-                    "enable_punc": bool(getattr(self.config, "enable_punc", True)),
-                    "enable_ddc": False,
-                    "show_utterances": True,
-                    "result_type": "full",
-                },
-            }
+        full_payload = {
+            "user": {"uid": "asr-proxy"},
+            "audio": audio_cfg,
+            "request": {
+                "model_name": MODEL_NAME,
+                "enable_itn": True,
+                "enable_punc": bool(getattr(self.config, "enable_punc", True)),
+                "enable_ddc": False,
+                "show_utterances": True,
+                "result_type": "full",
+            },
+        }
 
-            seq = 1
-            ws.send(_build_full_client_request(seq, full_payload), opcode=websocket.ABNF.OPCODE_BINARY)
-            seq += 1
+        seq = 1
+        ws.send(_build_full_client_request(seq, full_payload), opcode=websocket.ABNF.OPCODE_BINARY)
+        seq += 1
 
-            def _send_chunk(chunk: bytes, is_last: bool) -> None:
-                nonlocal seq
-                ws.send(
-                    _build_audio_only_request(seq, chunk, is_last),
-                    opcode=websocket.ABNF.OPCODE_BINARY,
-                )
-                if not is_last:
-                    seq += 1
-
-            send_pcm_chunks(
-                pcm,
-                _send_chunk,
-                segment_ms=self.segment_ms,
-                sample_rate=16000,
-                pace=False,
+        def _send_chunk(chunk: bytes, is_last: bool) -> None:
+            nonlocal seq
+            ws.send(
+                _build_audio_only_request(seq, chunk, is_last),
+                opcode=websocket.ABNF.OPCODE_BINARY,
             )
+            if not is_last:
+                seq += 1
 
-            while True:
-                try:
-                    raw = ws.recv()
-                except websocket.WebSocketTimeoutException as e:
-                    raise RuntimeError(
-                        f"豆包 ASR 等待响应超时（{self.timeout}s）"
-                    ) from e
-                except websocket.WebSocketConnectionClosedException as e:
-                    if seen_last:
-                        break
-                    raise RuntimeError(
-                        "豆包 ASR WebSocket 在收到最终结果前关闭"
-                    ) from e
+        send_pcm_chunks(
+            pcm,
+            _send_chunk,
+            segment_ms=self.segment_ms,
+            sample_rate=16000,
+            pace=False,
+        )
 
-                if isinstance(raw, str):
-                    raw = raw.encode("utf-8")
-                if not isinstance(raw, (bytes, bytearray)):
-                    continue
-
-                parsed = parse_server_frame(bytes(raw))
-                if parsed["message_type"] == _MSG_ERROR:
-                    raise RuntimeError(
-                        f"豆包 ASR 错误码={parsed.get('error_code')} "
-                        f"详情={parsed.get('error')!r}"
-                    )
-
-                if parsed["message_type"] == _MSG_FULL_SERVER:
-                    text, segments, duration = extract_result(parsed.get("payload"))
-                    if text:
-                        final_text = text
-                        final_segments = segments
-                        final_duration = duration
-                    if parsed.get("is_last"):
-                        seen_last = True
-                        break
-
-            if not seen_last and not final_text:
-                raise RuntimeError("豆包 ASR 未返回最终结果")
-            return final_text, final_segments, final_duration
-        finally:
+        while True:
             try:
-                ws.close()
-            except Exception:
-                pass
+                raw = ws.recv()
+            except websocket.WebSocketTimeoutException as e:
+                raise RuntimeError(
+                    f"豆包 ASR 等待响应超时（{self.timeout}s）"
+                ) from e
+            except websocket.WebSocketConnectionClosedException as e:
+                if seen_last:
+                    break
+                raise RuntimeError(
+                    "豆包 ASR WebSocket 在收到最终结果前关闭"
+                ) from e
+
+            if isinstance(raw, str):
+                raw = raw.encode("utf-8")
+            if not isinstance(raw, (bytes, bytearray)):
+                continue
+
+            parsed = parse_server_frame(bytes(raw))
+            if parsed["message_type"] == _MSG_ERROR:
+                raise RuntimeError(
+                    f"豆包 ASR 错误码={parsed.get('error_code')} "
+                    f"详情={parsed.get('error')!r}"
+                )
+
+            if parsed["message_type"] == _MSG_FULL_SERVER:
+                text, segments, duration = extract_result(parsed.get("payload"))
+                if text:
+                    final_text = text
+                    final_segments = segments
+                    final_duration = duration
+                if parsed.get("is_last"):
+                    seen_last = True
+                    break
+
+        if not seen_last and not final_text:
+            raise RuntimeError("豆包 ASR 未返回最终结果")
+        return final_text, final_segments, final_duration

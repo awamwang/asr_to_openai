@@ -152,6 +152,13 @@ providers:
     # asr-2.0 → volc.seedasr.sauc.duration（SeedASR 2.0）
     # asr-1.0 → volc.bigasr.sauc.duration
     # 也可直接填资源 ID，如 volc.seedasr.sauc.concurrent
+    # 连接预热（保持「上次使用的接口」的连接）：
+    #   warm: true    识别成功后后台保持 1 个已连接未使用的 WS，供下次复用
+    #                 （豆包 WS 收完 is_last 即断，协议不支持会话复用；
+    #                  预热把 connect ~0.3s 移出下次请求的关键路径）
+    #   warm_ttl: 20  预热连接空闲超过此时长视为失效（秒），服务端可能已断开
+    warm: true
+    warm_ttl: 20
     models:
       - asr-2.0
       - asr-1.0
