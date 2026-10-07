@@ -11,18 +11,16 @@ from __future__ import annotations
 
 import gzip
 import json
-import os
 import struct
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from asr_proxy.audio import cleanup, to_wav_16k_mono, write_temp_audio
+from asr_proxy.audio import load_pcm_s16le
 from asr_proxy.config import ProviderConfig
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.providers.stream_util import (
     DEFAULT_SEGMENT_MS,
     send_pcm_chunks,
-    wav_to_pcm_s16le,
 )
 
 DEFAULT_WS_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
@@ -287,29 +285,22 @@ class DoubaoProvider(AsrProvider):
 
         used_model = (model or "").strip() or self.default_model
         resource_id = resolve_resource_id(used_model)
-        suffix = os.path.splitext(filename or "")[1] or ".wav"
-        tmp = write_temp_audio(audio_bytes, suffix=suffix)
-        wav = None
-        try:
-            wav = to_wav_16k_mono(tmp, self.ffmpeg_path)
-            pcm, _rate = wav_to_pcm_s16le(wav)
-            text, segments, duration = self._recognize_ws(
-                pcm,
-                resource_id=resource_id,
-                language=_normalize_language(language),
-            )
-            if not text:
-                raise RuntimeError("豆包 ASR 返回空文本")
-            return AsrResult(
-                text=text,
-                language=_normalize_language(language) or "chinese",
-                duration=duration,
-                segments=segments or None,
-                provider=self.name,
-                model=used_model,
-            )
-        finally:
-            cleanup(tmp, wav)
+        pcm, _rate = load_pcm_s16le(audio_bytes, self.ffmpeg_path)
+        text, segments, duration = self._recognize_ws(
+            pcm,
+            resource_id=resource_id,
+            language=_normalize_language(language),
+        )
+        if not text:
+            raise RuntimeError("豆包 ASR 返回空文本")
+        return AsrResult(
+            text=text,
+            language=_normalize_language(language) or "chinese",
+            duration=duration,
+            segments=segments or None,
+            provider=self.name,
+            model=used_model,
+        )
 
     def _recognize_ws(
         self,

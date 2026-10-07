@@ -922,15 +922,13 @@ class TestDoubao:
         ))
 
         with patch.dict("sys.modules", {"websocket": fake_mod}):
-            with patch("asr_proxy.providers.doubao.to_wav_16k_mono", return_value="fake.wav"):
-                with patch(
-                    "asr_proxy.providers.doubao.wav_to_pcm_s16le",
-                    return_value=(b"\x00\x01" * 3200, 16000),
-                ):
-                    with patch("asr_proxy.providers.doubao.cleanup"):
-                        result = p.recognize(
-                            wav_bytes, filename="test.wav", model="asr-2.0",
-                        )
+            with patch(
+                "asr_proxy.providers.doubao.load_pcm_s16le",
+                return_value=(b"\x00\x01" * 3200, 16000),
+            ):
+                result = p.recognize(
+                    wav_bytes, filename="test.wav", model="asr-2.0",
+                )
 
         assert result.text == "豆包识别成功"
         assert result.provider == "doubao"

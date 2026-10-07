@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
-"""音频预处理：统一转为 16kHz 单声道 PCM WAV；裁首尾静音；探测时长。"""
+"""音频预处理：统一转为 16kHz 单声道 PCM WAV；裁首尾静音；探测时长。
+
+优化说明：输入已是 16k 单声道 16-bit PCM WAV 时，跳过 ffmpeg 直接复用
+（ffmpeg 进程启动约 0.12s，是预处理的主要成本）；裁首尾静音有纯 Python
+近似实现，避免在常见路径上拉起 ffmpeg。仅格式不符/压缩格式才走 ffmpeg。
+"""
 from __future__ import annotations
 
+import array
+import io
 import os
 import struct
 import subprocess
 import tempfile
+import wave
 from typing import Optional, Tuple
 
 # 首尾静音切除：先正放切开头，再反转切结尾（再反转回来）
@@ -17,6 +25,10 @@ _TRIM_SILENCE_AF = (
     "detection=peak,"
     "areverse"
 )
+
+# -40dB 峰值阈值（16-bit PCM）：0.01 * 32768 ≈ 328
+_TRIM_THRESHOLD = 328
+_TRIM_WINDOW_MS = 50
 
 
 def to_wav_mono(
@@ -55,6 +67,106 @@ def to_wav_16k_mono(
     )
 
 
+def parse_wav_format(data: bytes) -> Optional[dict]:
+    """解析 RIFF/WAVE 头，返回 fmt 与 data chunk 信息；非 WAV 或解析失败返回 None。
+
+    返回结构：{"fmt": {"format","channels","sample_rate","bits"},
+              "data_offset": int, "data_size": int}
+    format=1 表示 PCM（无压缩）。
+    """
+    if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return None
+    fmt = None
+    data_offset = None
+    data_size = None
+    offset = 12
+    try:
+        while offset + 8 <= len(data):
+            chunk_id = data[offset:offset + 4]
+            (size,) = struct.unpack("<I", data[offset + 4:offset + 8])
+            body = offset + 8
+            if chunk_id == b"fmt " and size >= 16 and len(data) >= body + 16:
+                audio_format, num_channels, sample_rate, _, _, bits = struct.unpack(
+                    "<HHIIHH", data[body:body + 16]
+                )
+                fmt = {
+                    "format": audio_format,
+                    "channels": num_channels,
+                    "sample_rate": sample_rate,
+                    "bits": bits,
+                }
+            elif chunk_id == b"data":
+                data_offset = body
+                data_size = size
+                break
+            # chunk 按偶数字节对齐
+            offset = body + size + (size & 1)
+    except (struct.error, IndexError):
+        return None
+    if fmt is None or data_offset is None:
+        return None
+    return {"fmt": fmt, "data_offset": data_offset, "data_size": data_size}
+
+
+def extract_pcm_data(audio_bytes: bytes, info: Optional[dict] = None) -> bytes:
+    """从 WAV 字节中取出 data chunk 的 PCM 数据（越界时截断）。"""
+    info = info or parse_wav_format(audio_bytes)
+    if info is None:
+        raise ValueError("not a WAV file")
+    off = int(info["data_offset"])
+    size = int(info["data_size"])
+    return audio_bytes[off:off + size]
+
+
+def build_pcm_wav(pcm: bytes, sample_rate: int = 16000) -> bytes:
+    """把 16-bit 单声道 PCM 打包成标准 WAV 字节。"""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
+
+
+def trim_silence_pcm(
+    pcm: bytes,
+    sample_rate: int = 16000,
+    *,
+    threshold: int = _TRIM_THRESHOLD,
+    window_ms: int = _TRIM_WINDOW_MS,
+) -> bytes:
+    """纯 Python 近似 ffmpeg silenceremove 的首尾静音裁切（-40dB / 50ms 窗口）。
+
+    定位首个/末个超过阈值的采样点，分别向首/尾回退 window_ms 后裁切。
+    与 ffmpeg silenceremove 存在约百毫秒级的边界差异（近似实现，保留略多），
+    用于跳过 ffmpeg 进程启动；全静音返回 b""。
+    """
+    if not pcm or len(pcm) % 2:
+        return pcm
+    arr = array.array("h")
+    arr.frombytes(pcm)
+    n = len(arr)
+    if n == 0:
+        return pcm
+    window = max(0, int(sample_rate * window_ms / 1000))
+    start = 0
+    for i in range(n):
+        v = arr[i]
+        if v >= threshold or v <= -threshold:
+            start = max(0, i - window)
+            break
+    else:
+        return b""
+    end = n
+    for i in range(n - 1, -1, -1):
+        v = arr[i]
+        if v >= threshold or v <= -threshold:
+            end = min(n, i + 1 + window)
+            break
+    return arr[start:end].tobytes()
+
+
 def preprocess_audio_bytes(
     audio_bytes: bytes,
     filename: str = "audio.wav",
@@ -65,10 +177,31 @@ def preprocess_audio_bytes(
 ) -> Tuple[bytes, str]:
     """识别前统一预处理：转单声道指定采样率 WAV，可选裁首尾静音。
 
-    返回 (wav_bytes, 新文件名)。失败时抛出异常，由调用方决定是否回退原音频。
+    输入已是 target 采样率单声道 16-bit PCM WAV 时直接复用/纯 Python 裁静音，
+    避免 ffmpeg 进程开销；其余（压缩格式/采样率不符）走 ffmpeg。
+    失败时抛出异常，由调用方决定是否回退原音频。
+
+    返回 (wav_bytes, 新文件名)。
     """
     if not audio_bytes:
         raise ValueError("empty audio")
+    info = parse_wav_format(audio_bytes)
+    fmt = info["fmt"] if info else None
+    is_target = (
+        info is not None
+        and fmt is not None
+        and int(fmt["format"]) == 1          # PCM
+        and int(fmt["sample_rate"]) == int(sample_rate)
+        and int(fmt["channels"]) == 1
+        and int(fmt["bits"]) == 16
+    )
+    if is_target:
+        # 已是目标格式：跳过 ffmpeg
+        if not trim_silence:
+            return audio_bytes, "audio_16k.wav"
+        pcm = extract_pcm_data(audio_bytes, info)
+        trimmed = trim_silence_pcm(pcm, int(sample_rate))
+        return build_pcm_wav(trimmed, int(sample_rate)), "audio_16k.wav"
     suffix = os.path.splitext(filename or "")[1] or ".wav"
     tmp = write_temp_audio(audio_bytes, suffix=suffix)
     wav_path = None
@@ -84,6 +217,38 @@ def preprocess_audio_bytes(
         if not data:
             raise RuntimeError("preprocess produced empty wav")
         return data, "audio_16k.wav"
+    finally:
+        cleanup(tmp, wav_path)
+
+
+def load_pcm_s16le(
+    audio_bytes: bytes,
+    ffmpeg: str = "ffmpeg",
+    sample_rate: int = 16000,
+) -> Tuple[bytes, int]:
+    """读取 16-bit PCM：已是目标采样率单声道时直接读 data chunk，否则 ffmpeg 转换。
+
+    供各 provider 在识别前使用，避免对已合规的 WAV 重复转换。
+    """
+    info = parse_wav_format(audio_bytes)
+    fmt = info["fmt"] if info else None
+    if (
+        info is not None
+        and fmt is not None
+        and int(fmt["format"]) == 1
+        and int(fmt["sample_rate"]) == int(sample_rate)
+        and int(fmt["channels"]) == 1
+        and int(fmt["bits"]) == 16
+    ):
+        return extract_pcm_data(audio_bytes, info), int(sample_rate)
+    tmp = write_temp_audio(audio_bytes, suffix=".wav")
+    wav_path = None
+    try:
+        wav_path = to_wav_mono(
+            tmp, sample_rate=sample_rate, ffmpeg=ffmpeg, trim_silence=False,
+        )
+        from asr_proxy.providers.stream_util import wav_to_pcm_s16le
+        return wav_to_pcm_s16le(wav_path)
     finally:
         cleanup(tmp, wav_path)
 
