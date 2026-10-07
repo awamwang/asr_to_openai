@@ -117,6 +117,7 @@ python skills/asr-openai-proxy/scripts/report_status.py
 ### 2.6 腾讯云 ASR（tencent，极速版）
 - 控制台：https://console.cloud.tencent.com/asr ；CAM 密钥：https://console.cloud.tencent.com/cam/capi
 - 鉴权：Flash HMAC-SHA1（SecretId / SecretKey / AppID）；硬限 t>2h 或 >100MB 被策略排除
+- **Realtime 实时发送问题（重要）**：`realtime-*` 是实时 WebSocket，协议要求按音频 **1:1 实时率**分片发送（官方建议 ~200ms/包，发送速率过快超过 1:1 或包间隔 >6s 会报错断开，见 https://cloud.tencent.com/document/api/1093/48982）。本代理是「整段一次性转写」，realtime 只能切块按 1:1 速率推流，20s 音频光发送就要 ~20s（实测 6s 音频 realtime 8.14s vs Flash 1.42s）。**默认启用 Flash，realtime 保持注释不启用。**
 - YAML 字段：
   ```yaml
   tencent:
@@ -124,8 +125,8 @@ python skills/asr-openai-proxy/scripts/report_status.py
     secret_key: "xxx"
     app_id: "125xxxxxxx"
     models:
-      - 16k_zh               # Flash 中文通用（月 5h 极速包，S1）
-      - realtime-16k_zh      # 实时 WebSocket（另计实时 5h 包）
+      - 16k_zh               # Flash 中文通用（月 5h 极速包，S1，同步 HTTP，默认）
+      # - realtime-16k_zh    # 实时 WebSocket：1:1 实时率发送，整段转写更慢，默认不启用
       - "16k_zh-PY"          # Flash 中英粤（与 16k_zh 同一 5h）
       - 16k_en
       - 16k_yue

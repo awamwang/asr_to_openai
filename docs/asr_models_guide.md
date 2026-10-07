@@ -277,7 +277,8 @@ Groq 为海外高质量备选（常需代理 `127.0.0.1:7881`），可进 `strat
   | 录音文件识别（异步） | 10 小时 | 未接 | 需公网 URL |
   | 语音流异步识别 | 5 小时 | 未接 | — |
 - 计费：标准极速版 **3.1 元/时起**；实时标准版 **3.2 元/时起**；大模型 1.0 极速版 **5 元/时起**；按时长产品**最低计费单位 1 秒**
-- 硬限（Flash）：≤2h / ≤100MB；实时按约 1:1 速率分片（200ms/包）
+- 硬限（Flash）：≤2h / ≤100MB；实时按约 1:1 速率分片（200ms/包，**发送速率超过 1:1 或包间隔 >6s 报错断开**，官方约束 https://cloud.tencent.com/document/api/1093/48982）
+- **⚠️ realtime 默认不启用**：本代理是整段一次性转写，realtime 只能切块按 1:1 速率推流——20s 音频光发送就要 ≥20s。实测同 6s 音频：`realtime-16k_zh` 端到端 8.14s vs `16k_zh`（Flash）1.42s；20s 音频 Flash 仅 1.18s。config 默认启用 Flash，`realtime-*` 保持注释。
 - 断句：Flash 无上游 VAD 参数；本代理默认 `extra_punc=0`，并按 `max_sentence_silence`（默认 2500ms）合并碎句。实时用 `needvad=1`，收集 `slice_type=2` 稳定句
 - 未接入：录音文件·大模型 2.0 异步（需公网 URL / COS）；一句话 / 录音文件异步 / 语音流异步
 - 开通准备：注册 + 实名 → 控制台开通 ASR → [CAM 建密钥](https://console.cloud.tencent.com/cam/capi)

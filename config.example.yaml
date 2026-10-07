@@ -240,15 +240,22 @@ providers:
   #   secret_key: ""
   #   app_id: ""
   #   models:
-  #     - 16k_zh              # Flash 中文通用（推荐默认，S1）
-  #     - realtime-16k_zh     # 实时 WebSocket（另计实时 5h，约 1:1）
-  #     - "16k_zh-PY"         # Flash 中英粤
-  #     - 16k_en              # Flash 英语
-  #     - 16k_yue             # Flash 粤语
-  #     - 8k_zh               # Flash 中文电话
-  #     - 8k_en               # Flash 英文电话
-  #     # 同包其他标准 Flash：16k_ja / 16k_ko / 16k_vi / …
-  #     # - 16k_zh_en         # Flash 大模型1.0，无月免费额度
+  #     - 16k_zh              # Flash 中文通用（推荐默认，S1，同步 HTTP）
+  #     # ── Realtime 实时发送问题（重要）──────────────────────────
+  #     # realtime-* 是「实时 WebSocket」，协议要求按音频 1:1 实时率分片发送
+  #     # （官方建议 ~200ms/包，发送速率过快超过 1:1 或包间隔 >6s 会报错断开）。
+  #     # 本代理是「整段一次性转写」，realtime 只能切块按 1:1 速率推流：
+  #     # 20s 音频光发送就要 ~20s（实测 6s 音频 realtime 8.14s vs Flash 1.42s）。
+  #     # 闪电说场景请用 Flash，默认不要启用 realtime。官方约束：
+  #     #   https://cloud.tencent.com/document/api/1093/48982
+  #     # - realtime-16k_zh   # 实时 WebSocket 中文（1:1 发送，默认不启用）
+  #     # - "16k_zh-PY"         # Flash 中英粤
+  #     # - 16k_en              # Flash 英语
+  #     # - 16k_yue             # Flash 粤语
+  #     # - 8k_zh               # Flash 中文电话
+  #     # - 8k_en               # Flash 英文电话
+  #     # # 同包其他标准 Flash：16k_ja / 16k_ko / 16k_vi / …
+  #     # # - 16k_zh_en         # Flash 大模型1.0，无月免费额度
   #   max_sentence_silence: 2500   # 本地合并碎句（Flash 无 VAD 参数）
   #   # filter_punc 由 text.clean_punctuation 映射，勿单独当主开关
 
