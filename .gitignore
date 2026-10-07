@@ -10,5 +10,6 @@ dist/
 build/
 .DS_Store
 asr_proxy.log*
+test_asr_proxy.log*
 .scratch/
 keepalive/
