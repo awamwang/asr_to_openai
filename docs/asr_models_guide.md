@@ -189,6 +189,35 @@ t\* = P / S。按次基准 P = 百度标准版 0.0034 元/次（极速版刊例�
 在硬限过滤后的全集上排序（含付费与免费）。要「只在免费里选最快/最准」用组合 ID。
 Groq 为海外高质量备选（常需代理 `127.0.0.1:7881`），可进 `strategy-speed` / `strategy-accuracy` / `strategy-free` / `strategy-cost`（美元按 1:7 折合）。
 
+#### 实测校准（2026-10-10）
+
+`speed_tier` 已用本地实测重排（代码侧见 `asr_proxy/strategy/metadata.py` 的 `_MEASURED_2026_10`，
+原始数据 `bench/result.json`）：5 段中文 TTS 录音（3.26/5.26/8.28/14.09/20.04s，
+15/24/40/70/90 字，16kHz 单声道 WAV），每组合 2 轮 + 1 次预热取平均。
+代理前置/后置合计 <3ms，端到端 ≈ 上游 API 耗时。RTF = API 耗时 ÷ 音频时长。
+
+| 排名 | 模型 ID | 平均 API 耗时 | RTF | 实测等级 | 文档静态等级 |
+|---|---|---|---|---|---|
+| 1 | `tencent/16k_zh` | 0.346s | 0.034 | S1 | S1 |
+| 2 | `stepfun/stepaudio-2.5-asr` | 0.474s | 0.047 | S1 | S2–S3 |
+| 3 | `baidu/1537` | 0.702s | 0.069 | S2 | S3 |
+| 4 | `doubao/asr-2.0` | 1.523s | 0.149 | S2 | S3 |
+| 5 | `doubao/asr-1.0` | 1.560s | 0.153 | S2 | S3 |
+| 6 | `groq/whisper-large-v3-turbo` | 1.911s | 0.188 | S2 | S2 |
+| 7 | `aliyun/qwen-audio-3.0-asr-flash` | 2.191s | 0.215 | S3 | S3 |
+| 8 | `groq/whisper-large-v3` | 2.435s | 0.239 | S3 | S2 |
+| 9 | `aliyun/qwen-audio-3.0-asr-flash-streaming` | 2.791s | 0.274 | S3 | S4 |
+| 10 | `aliyun/qwen-audio-3.1-asr-flash-streaming` | 5.257s | 0.516 | S4 | S4 |
+| — | `siliconflow/SenseVoiceSmall` | 13.766s | **1.352** | S5 | S2 |
+| — | `baidu/80001` | 调用失败 | — | — | S2 |
+
+处理结论：
+
+- **硅基 `SenseVoiceSmall`**：RTF > 1（慢于实时），已从 `config.yaml` 停用并整块注释（该服务商当前仅此一个模型）。
+- **百度 `80001`**：全部 5 段报 `[permission] No permission to access data`（控制台未开通极速版权限），已从默认模型移除；开通后可加回。
+- **阿里 3.1-streaming** 在 14s 段出现 11.8s 尖峰（其余段 1.5–5.9s），疑似长音频流式回传抖动；同组 3.0-streaming 无此现象。
+- 转写准确率：本次样本下除 Groq 两款不输出标点外各模型文本一致，**未做准确率打分**，`accuracy_tier` 仍为静态等级。
+
 ---
 
 ## 四、平台信息（单独列出）

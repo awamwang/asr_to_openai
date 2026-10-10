@@ -77,7 +77,9 @@ class CostFirstStrategy(RoutingStrategy):
 class SpeedFirstStrategy(RoutingStrategy):
     """速度优先：按模型速度等级 S1→S5（数字小在前）排序。
 
-    采用文档静态等级（S1 极速…S5 异步），未做真实速度实测。
+    等级已用 2026-10-10 本地实测校准（见 metadata._MEASURED_2026_10）；
+    未实测模型沿用文档静态等级。同档位时保持路由层传入的底序
+    （config.yaml speed_order 决定服务商先后，同服务商按 models 配置顺序）。
     """
 
     name = "speed"

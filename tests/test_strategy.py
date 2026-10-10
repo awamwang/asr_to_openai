@@ -136,7 +136,8 @@ class TestMetadata:
         p = get_profile("siliconflow", "SenseVoiceSmall")
         assert p.cost.billing == "free"
         assert p.cost.free_tier == "longterm"
-        assert p.speed_tier == 2
+        # 2026-10-10 实测 13.77s / RTF 1.35（慢于实时）→ 降为最慢档 S5
+        assert p.speed_tier == 5
         assert p.supported is True
 
     def test_aliases(self):
@@ -342,9 +343,10 @@ class TestSpeedAndAccuracy:
             for m in (p.model_names or [p.default_model])
         ]
         ordered = _pair_labels(SpeedFirstStrategy().rank(pool))
-        # S2（硅基、Groq）最前，S4（阿里 3.1 流式）最后
-        assert ordered[0] == ("siliconflow", "SenseVoiceSmall")
-        assert ordered[-1] == ("aliyun", "qwen-audio-3.1-asr-flash-streaming")
+        # 2026-10-10 实测校准后：豆包 / Groq turbo 为最快档 S2，
+        # 硅基 SenseVoice（RTF 1.35）降为 S5 排最后
+        assert ordered[0] == ("doubao", "asr-2.0")
+        assert ordered[-1] == ("siliconflow", "SenseVoiceSmall")
         tiers = [get_profile(p, m).speed_tier for p, m in ordered]
         assert tiers == sorted(tiers)
 
@@ -444,9 +446,10 @@ class TestFreeStrategy:
         ]
         combo = build_strategy("free+speed")
         ordered = _pair_labels(combo.rank(pool, duration=30))
-        # 免费集合内 S2（硅基、Groq）应在 S4（阿里 3.1 流式）之前
-        assert ordered[0] == ("siliconflow", "SenseVoiceSmall")
-        assert ordered[-1] == ("aliyun", "qwen-audio-3.1-asr-flash-streaming")
+        # 免费集合内按实测速度：豆包 / Groq turbo（S2，1.5–1.9s）在前，
+        # 硅基 SenseVoice（实测 13.8s，S5）排最后
+        assert ordered[0] == ("doubao", "asr-2.0")
+        assert ordered[-1] == ("siliconflow", "SenseVoiceSmall")
 
 
 class TestRecommendedStub:
