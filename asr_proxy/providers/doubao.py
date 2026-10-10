@@ -252,12 +252,22 @@ class DoubaoProvider(AsrProvider):
         self.timeout = float(config.timeout or DEFAULT_TIMEOUT)
         self.ws_url = (config.base_url or DEFAULT_WS_URL).strip() or DEFAULT_WS_URL
         self.app_id = (getattr(config, "app_id", None) or config.workspace_id or "").strip()
-        self.segment_ms = DEFAULT_SEGMENT_MS
         # 连接预热：保持「上次使用的接口」的连接，把建连移出下次请求的关键路径。
         # 豆包 WS 协议不提供连接复用（收完 is_last 服务端即断开），因此只能力求
         # 「后台常驻 1 个已连接未使用的 WS」，请求取用、用后关闭、后台补建。
         self.warm_enabled = bool(getattr(config, "warm", True))
         self.warm_ttl = float(getattr(config, "warm_ttl", 0) or 20.0)
+        # 分片大小（毫秒）：优先按模型覆盖，其次服务商级，最后内置默认。
+        # 分片数 ≈ 网络往返次数，实测 nostream 下 200ms→1000ms 端到端省约 32%。
+        self.segment_ms = (
+            int(getattr(config, "segment_ms", 0) or 0) or DEFAULT_SEGMENT_MS
+        )
+        self._segment_ms_by_model = {
+            str(k).strip().lower(): int(v)
+            for k, v in (
+                getattr(config, "segment_ms_by_model", None) or {}
+            ).items()
+        }
         self._warm_pool: "queue.Queue" = queue.Queue(maxsize=1)
         self._warm_lock = threading.Lock()
         self._warmer_alive = False
@@ -267,6 +277,16 @@ class DoubaoProvider(AsrProvider):
     @property
     def default_model(self) -> str:
         return self.config.model or "asr-2.0"
+
+    def _segment_ms_for(self, model: str, resource_id: str) -> int:
+        """按模型取分片大小：模型名/资源 ID 覆盖 > 服务商级 > 内置默认。"""
+        for key in (
+            (model or "").strip().lower(),
+            (resource_id or "").strip().lower(),
+        ):
+            if key and key in self._segment_ms_by_model:
+                return self._segment_ms_by_model[key]
+        return self.segment_ms
 
     def _auth_headers(self, connect_id: str) -> Dict[str, str]:
         headers = {
@@ -303,6 +323,7 @@ class DoubaoProvider(AsrProvider):
             pcm,
             resource_id=resource_id,
             language=_normalize_language(language),
+            segment_ms=self._segment_ms_for(used_model, resource_id),
         )
         if not text:
             raise RuntimeError("豆包 ASR 返回空文本")
@@ -403,6 +424,7 @@ class DoubaoProvider(AsrProvider):
         pcm: bytes,
         resource_id: str,
         language: str = "",
+        segment_ms: Optional[int] = None,
     ) -> Tuple[str, List[dict], float]:
         try:
             import websocket
@@ -412,13 +434,14 @@ class DoubaoProvider(AsrProvider):
             ) from e
 
         self._last_resource_id = resource_id
+        seg = int(segment_ms or self.segment_ms)
         # 预热连接可能已被服务端空闲断开：失败时重建一次再跑，避免整个请求失败
         for attempt in (0, 1):
             ws = self._take_warm_ws(resource_id)
             if ws is None:
                 ws = self._connect_ws(resource_id)
             try:
-                return self._run_ws_session(ws, pcm, language)
+                return self._run_ws_session(ws, pcm, language, segment_ms=seg)
             except (
                 websocket.WebSocketConnectionClosedException,
                 ConnectionError,
@@ -439,6 +462,7 @@ class DoubaoProvider(AsrProvider):
         ws,
         pcm: bytes,
         language: str,
+        segment_ms: Optional[int] = None,
     ) -> Tuple[str, List[dict], float]:
         """在已建立的 WS 连接上完成一次 nostream 识别会话。"""
         import websocket
@@ -488,7 +512,7 @@ class DoubaoProvider(AsrProvider):
         send_pcm_chunks(
             pcm,
             _send_chunk,
-            segment_ms=self.segment_ms,
+            segment_ms=int(segment_ms or self.segment_ms),
             sample_rate=16000,
             pace=False,
         )

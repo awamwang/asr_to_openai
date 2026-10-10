@@ -149,7 +149,7 @@ text:
 |---|---|
 | 阿里云 | `DASHSCOPE_API_KEY` / `ALIYUN_API_KEY`，`DASHSCOPE_WORKSPACE_ID`，`DASHSCOPE_ASR_MODELS`（逗号分隔）或 `DASHSCOPE_ASR_MODEL` |
 | Groq | `GROQ_API_KEY`，`GROQ_BASE_URL`，`GROQ_PROXY`，`GROQ_TIMEOUT`，`GROQ_ASR_MODELS` / `GROQ_DEFAULT_MODEL` |
-| 豆包 | `DOUBAO_API_KEY` / `VOLC_API_KEY`，`DOUBAO_APP_ID` / `VOLC_APP_ID`，`DOUBAO_WS_URL`，`DOUBAO_ASR_MODELS` |
+| 豆包 | `DOUBAO_API_KEY` / `VOLC_API_KEY`，`DOUBAO_APP_ID` / `VOLC_APP_ID`，`DOUBAO_WS_URL`，`DOUBAO_ASR_MODELS`，`DOUBAO_SEGMENT_MS` |
 | 硅基流动 | `SILICONFLOW_API_KEY` / `SF_API_KEY`，`SILICONFLOW_BASE_URL`，`SILICONFLOW_ASR_MODELS` |
 | 腾讯云 | `TENCENT_SECRET_ID`，`TENCENT_SECRET_KEY`，`TENCENT_APP_ID` |
 | 百度 | `BAIDU_API_KEY`，`BAIDU_SECRET_KEY`，`BAIDU_APP_ID` |
@@ -185,6 +185,19 @@ python main.py
 | `asr-2.0` | `volc.seedasr.sauc.duration` |
 | `asr-1.0-concurrent` | `volc.bigasr.sauc.concurrent` |
 | `asr-2.0-concurrent` | `volc.seedasr.sauc.concurrent` |
+
+豆包连接预热与分片大小（`config.yaml` → `providers.doubao`）：
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `warm` | `true` | 识别成功后后台补建 1 个已连接未使用的 WS，把建连（~0.3s）移出下次请求的关键路径 |
+| `warm_ttl` | `43200`（12h） | 预热连接空闲超过此时长视为失效（秒）。仅表示「客户端愿意复用多久」；服务端仍可能提前断开，**取用时若已断开会自动重建一次**，不会导致请求失败 |
+| `segment_ms` | `1000` | 音频分片大小（毫秒）。分片数 ≈ 网络往返次数，**直接决定识别耗时** |
+| `segment_ms_by_model` | 见下 | 按模型覆盖分片大小；键可用模型名或资源 ID，大小写不敏感 |
+
+实测（2026-10-10，8.28s 音频，预热命中，端到端）：分片 `200ms`(44 片)=1161ms、
+`500`=1076ms、**`1000`(11 片)=823ms**、`2000`=840ms、`5000`=1066ms；
+5 段音频平均 `200ms→1495ms`、`1000ms→1010ms`（**-32%**），识别文本逐字一致。
 
 ---
 

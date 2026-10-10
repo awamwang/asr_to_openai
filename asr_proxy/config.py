@@ -93,8 +93,16 @@ class ProviderConfig:
     # 连接预热：识别成功后后台保持 1 个已连接未使用的 WS，供下次请求复用
     # （把建连移出关键路径；仅 WS 型服务商消费该字段）
     warm: bool = True
-    # 预热连接空闲超过此时长视为失效（服务端可能已断开），秒
+    # 预热连接空闲超过此时长视为失效（秒）。注意这只是「客户端愿意复用多久」，
+    # 服务端仍可能提前断开空闲连接；取用时若已断开会自动重建（见各 Provider）。
     warm_ttl: float = 20.0
+    # 音频分片大小（毫秒）：WS 型服务商按此切 PCM 后逐片发送。
+    # 分片数 ≈ 网络往返次数，实测豆包 nostream 200ms→1000ms 端到端省约 32%。
+    # 0 表示用该 Provider 内置默认（豆包/腾讯实时目前为 200ms）。
+    segment_ms: int = 0
+    # 按模型覆盖分片大小：{模型名或资源 ID: 毫秒}，键大小写不敏感。
+    # 未命中则用 segment_ms，再未配置则用 Provider 内置默认。
+    segment_ms_by_model: Dict[str, int] = field(default_factory=dict)
 
     @property
     def enabled(self) -> bool:
@@ -326,6 +334,41 @@ def _int_env(*keys: str, default: int = 1300) -> int:
     return _clamp_sentence_silence(raw, default=default)
 
 
+def _int_env_raw(*keys: str, default: int = 0) -> int:
+    """读取整数环境变量（不钳制范围），未设置则用 default。"""
+    raw = _first_env(*keys)
+    if not raw:
+        return default
+    return _int_yaml(raw, default)
+
+
+def _int_yaml(raw: Any, default: int = 0) -> int:
+    """解析整数配置（不做范围钳制，与 VAD 静音阈值区分开）。"""
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _parse_int_map(raw: Any) -> Dict[str, int]:
+    """解析 {键: 毫秒} 映射，键小写化；值非法则跳过。"""
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, int] = {}
+    for key, value in raw.items():
+        try:
+            ivalue = int(str(value).strip())
+        except (TypeError, ValueError):
+            continue
+        if ivalue <= 0:
+            continue
+        out[str(key).strip().lower()] = ivalue
+    return out
+
+
 def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
     """合并 YAML 与环境变量，环境变量优先。"""
     raw = raw or {}
@@ -451,6 +494,11 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
             warm_ttl=float(
                 raw.get("warm_ttl") if raw.get("warm_ttl") is not None else 20.0
             ),
+            segment_ms=_int_env_raw(
+                "DOUBAO_SEGMENT_MS", "VOLC_SEGMENT_MS",
+                default=_int_yaml(raw.get("segment_ms"), 0),
+            ),
+            segment_ms_by_model=_parse_int_map(raw.get("segment_ms_by_model")),
         )
     if name in ("siliconflow", "silicon", "sf"):
         env_models = _first_env(
