@@ -1,0 +1,2336 @@
+{
+  "generated_at": "2026-10-10 12:50:36",
+  "rounds": 2,
+  "warmup": 1,
+  "audio_preprocess": true,
+  "audio_trim_silence": true,
+  "clean_punctuation": false,
+  "audios": [
+    {
+      "name": "s1_short",
+      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s1_short.wav",
+      "bytes": 104526,
+      "seconds": 3.264
+    },
+    {
+      "name": "s2",
+      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s2.wav",
+      "bytes": 168270,
+      "seconds": 5.256
+    },
+    {
+      "name": "s3",
+      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s3.wav",
+      "bytes": 265038,
+      "seconds": 8.28
+    },
+    {
+      "name": "s4",
+      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s4.wav",
+      "bytes": 450894,
+      "seconds": 14.088
+    },
+    {
+      "name": "s5_long",
+      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s5_long.wav",
+      "bytes": 641358,
+      "seconds": 20.04
+    }
+  ],
+  "models": [
+    "tencent/16k_zh",
+    "aliyun/qwen-audio-3.1-asr-flash-streaming",
+    "aliyun/qwen-audio-3.0-asr-flash-streaming",
+    "aliyun/qwen-audio-3.0-asr-flash",
+    "baidu/1537",
+    "baidu/80001",
+    "doubao/asr-2.0",
+    "doubao/asr-1.0",
+    "siliconflow/SenseVoiceSmall",
+    "groq/whisper-large-v3",
+    "groq/whisper-large-v3-turbo",
+    "stepfun/stepaudio-2.5-asr"
+  ],
+  "runs": [
+    {
+      "model": "tencent/16k_zh",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 0.485,
+          "pre": 0.0012,
+          "api": 0.4837,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 0.326,
+          "pre": 0.0008,
+          "api": 0.3251,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.4055,
+        "pre": 0.001,
+        "api": 0.4044,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "tencent/16k_zh",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 25,
+          "text": "帮我查一下，明天上午从北京到上海的高铁票还有没有？",
+          "total": 0.1142,
+          "pre": 0.0012,
+          "api": 0.1129,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 25,
+          "text": "帮我查一下，明天上午从北京到上海的高铁票还有没有？",
+          "total": 0.4693,
+          "pre": 0.0008,
+          "api": 0.4685,
+          "post": 0.0,
+          "other": 0.0
+        }
+      ],
+      "avg": {
+        "total": 0.2918,
+        "pre": 0.001,
+        "api": 0.2907,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "tencent/16k_zh",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 0.4289,
+          "pre": 0.0009,
+          "api": 0.428,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 0.1405,
+          "pre": 0.0008,
+          "api": 0.1396,
+          "post": 0.0,
+          "other": 0.0
+        }
+      ],
+      "avg": {
+        "total": 0.2847,
+        "pre": 0.0009,
+        "api": 0.2838,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "tencent/16k_zh",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 0.5918,
+          "pre": 0.001,
+          "api": 0.5908,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 0.1456,
+          "pre": 0.001,
+          "api": 0.1445,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.3687,
+        "pre": 0.001,
+        "api": 0.3676,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "tencent/16k_zh",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事，第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试，还差安卓低端机型需要补测",
+          "total": 0.1716,
+          "pre": 0.0018,
+          "api": 0.1697,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事，第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试，还差安卓低端机型需要补测",
+          "total": 0.6028,
+          "pre": 0.0012,
+          "api": 0.6015,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.3872,
+        "pre": 0.0015,
+        "api": 0.3856,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.1-asr-flash-streaming",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 1.3677,
+          "pre": 0.0009,
+          "api": 1.3667,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 1.7247,
+          "pre": 0.0015,
+          "api": 1.7231,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.5462,
+        "pre": 0.0012,
+        "api": 1.5449,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.1-asr-flash-streaming",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 2.6244,
+          "pre": 0.0009,
+          "api": 2.6234,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 2.2648,
+          "pre": 0.0009,
+          "api": 2.2639,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 2.4446,
+        "pre": 0.0009,
+        "api": 2.4436,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.1-asr-flash-streaming",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 3.0545,
+          "pre": 0.0008,
+          "api": 3.0536,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 6.09,
+          "pre": 0.0009,
+          "api": 6.089,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 4.5723,
+        "pre": 0.0009,
+        "api": 4.5713,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.1-asr-flash-streaming",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 12.74,
+          "pre": 0.0012,
+          "api": 12.7385,
+          "post": 0.0,
+          "other": 0.0002
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 10.8951,
+          "pre": 0.0013,
+          "api": 10.8937,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 11.8176,
+        "pre": 0.0012,
+        "api": 11.8161,
+        "post": 0.0,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.1-asr-flash-streaming",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 5.6676,
+          "pre": 0.0014,
+          "api": 5.666,
+          "post": 0.0,
+          "other": 0.0002
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 6.1511,
+          "pre": 0.0014,
+          "api": 6.1496,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 5.9093,
+        "pre": 0.0014,
+        "api": 5.9078,
+        "post": 0.0,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash-streaming",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 1.4409,
+          "pre": 0.0011,
+          "api": 1.4397,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 1.854,
+          "pre": 0.0008,
+          "api": 1.8531,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.6475,
+        "pre": 0.001,
+        "api": 1.6464,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash-streaming",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 1.8542,
+          "pre": 0.0015,
+          "api": 1.8525,
+          "post": 0.0,
+          "other": 0.0002
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 1.7673,
+          "pre": 0.0008,
+          "api": 1.7664,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.8108,
+        "pre": 0.0011,
+        "api": 1.8095,
+        "post": 0.0,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash-streaming",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 2.268,
+          "pre": 0.0008,
+          "api": 2.2671,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 2.5058,
+          "pre": 0.0008,
+          "api": 2.5049,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 2.3869,
+        "pre": 0.0008,
+        "api": 2.386,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash-streaming",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 3.7071,
+          "pre": 0.0014,
+          "api": 3.7055,
+          "post": 0.0,
+          "other": 0.0003
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 3.6707,
+          "pre": 0.0019,
+          "api": 3.6687,
+          "post": 0.0,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 3.6889,
+        "pre": 0.0016,
+        "api": 3.6871,
+        "post": 0.0,
+        "other": 0.0003
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash-streaming",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步3件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 4.4012,
+          "pre": 0.0015,
+          "api": 4.3996,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 89,
+          "text": "大家好，今天同步3件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型需要补测。",
+          "total": 4.4502,
+          "pre": 0.0013,
+          "api": 4.4484,
+          "post": 0.0,
+          "other": 0.0006
+        }
+      ],
+      "avg": {
+        "total": 4.4257,
+        "pre": 0.0014,
+        "api": 4.424,
+        "post": 0.0,
+        "other": 0.0003
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 1.0109,
+          "pre": 0.0007,
+          "api": 1.0101,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 1.044,
+          "pre": 0.0007,
+          "api": 1.0432,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.0274,
+        "pre": 0.0007,
+        "api": 1.0267,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有。",
+          "total": 1.2187,
+          "pre": 0.0009,
+          "api": 1.2178,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有。",
+          "total": 1.1831,
+          "pre": 0.0008,
+          "api": 1.1822,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.2009,
+        "pre": 0.0009,
+        "api": 1.2,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 1.6941,
+          "pre": 0.0008,
+          "api": 1.6932,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 1.1736,
+          "pre": 0.001,
+          "api": 1.1723,
+          "post": 0.0,
+          "other": 0.0003
+        }
+      ],
+      "avg": {
+        "total": 1.4339,
+        "pre": 0.0009,
+        "api": 1.4327,
+        "post": 0.0,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题。但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 1.979,
+          "pre": 0.001,
+          "api": 1.9779,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题。但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 2.9969,
+          "pre": 0.0018,
+          "api": 2.9949,
+          "post": 0.0,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 2.488,
+        "pre": 0.0014,
+        "api": 2.4864,
+        "post": 0.0,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "aliyun/qwen-audio-3.0-asr-flash",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 89,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型需要补测。",
+          "total": 3.7962,
+          "pre": 0.0072,
+          "api": 3.7879,
+          "post": 0.001,
+          "other": 0.0002
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 89,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型需要补测。",
+          "total": 5.8335,
+          "pre": 0.0045,
+          "api": 5.8288,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 4.8148,
+        "pre": 0.0058,
+        "api": 4.8083,
+        "post": 0.0005,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "baidu/1537",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧！",
+          "total": 0.3151,
+          "pre": 0.0031,
+          "api": 0.3119,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧！",
+          "total": 0.3124,
+          "pre": 0.0014,
+          "api": 0.3108,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.3137,
+        "pre": 0.0022,
+        "api": 0.3114,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "baidu/1537",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 25,
+          "text": "帮我查一下，明天上午从北京到上海的高铁票还有没有？",
+          "total": 0.4856,
+          "pre": 0.0086,
+          "api": 0.4769,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 25,
+          "text": "帮我查一下，明天上午从北京到上海的高铁票还有没有？",
+          "total": 0.4584,
+          "pre": 0.0016,
+          "api": 0.4566,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.472,
+        "pre": 0.0051,
+        "api": 0.4667,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "baidu/1537",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 0.7467,
+          "pre": 0.0061,
+          "api": 0.7389,
+          "post": 0.0,
+          "other": 0.0017
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 0.6623,
+          "pre": 0.0015,
+          "api": 0.6607,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.7045,
+        "pre": 0.0038,
+        "api": 0.6998,
+        "post": 0.0,
+        "other": 0.0009
+      }
+    },
+    {
+      "model": "baidu/1537",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 69,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小建议你再补充两周的原始数据，这样结论",
+          "total": 0.8207,
+          "pre": 0.0015,
+          "api": 0.8191,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 69,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小建议你再补充两周的原始数据，这样结论",
+          "total": 0.7049,
+          "pre": 0.0019,
+          "api": 0.7028,
+          "post": 0.0,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 0.7628,
+        "pre": 0.0017,
+        "api": 0.761,
+        "post": 0.0,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "baidu/1537",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 89,
+          "text": "大家好，今天同步三件事，第一，服务端接口改造已完成，预计下周二灰度发布第二课户端兼容性测试，还差安卓低端进行，需要补测，",
+          "total": 1.3514,
+          "pre": 0.0018,
+          "api": 1.3495,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 89,
+          "text": "大家好，今天同步三件事，第一，服务端接口改造已完成，预计下周二灰度发布第二课户端兼容性测试，还差安卓低端进行，需要补测，",
+          "total": 1.1902,
+          "pre": 0.0018,
+          "api": 1.1883,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.2708,
+        "pre": 0.0018,
+        "api": 1.2689,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "baidu/80001",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 0,
+      "rounds": [
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.0579,
+          "pre": 0.0019,
+          "api": 0.0557,
+          "post": 0.0,
+          "other": 0.0002
+        },
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.0583,
+          "pre": 0.0009,
+          "api": 0.0571,
+          "post": 0.0,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 0.0,
+        "pre": 0.0,
+        "api": 0.0,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "baidu/80001",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 0,
+      "rounds": [
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.0631,
+          "pre": 0.0017,
+          "api": 0.0611,
+          "post": 0.0,
+          "other": 0.0003
+        },
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.0605,
+          "pre": 0.0017,
+          "api": 0.0585,
+          "post": 0.0,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 0.0,
+        "pre": 0.0,
+        "api": 0.0,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "baidu/80001",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 0,
+      "rounds": [
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.2895,
+          "pre": 0.0011,
+          "api": 0.2883,
+          "post": 0.0,
+          "other": 0.0002
+        },
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.721,
+          "pre": 0.0009,
+          "api": 0.72,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.0,
+        "pre": 0.0,
+        "api": 0.0,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "baidu/80001",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 0,
+      "rounds": [
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.517,
+          "pre": 0.001,
+          "api": 0.5159,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 0.6892,
+          "pre": 0.0014,
+          "api": 0.6875,
+          "post": 0.0,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 0.0,
+        "pre": 0.0,
+        "api": 0.0,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "baidu/80001",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 0,
+      "rounds": [
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 1.1447,
+          "pre": 0.0015,
+          "api": 1.143,
+          "post": 0.0,
+          "other": 0.0002
+        },
+        {
+          "ok": false,
+          "error": "RuntimeError: 全部服务商识别失败: baidu/80001: AsrProviderError: [permission] baidu/80001: 6: No permission to access data",
+          "chars": 0,
+          "text": "",
+          "total": 1.1459,
+          "pre": 0.0017,
+          "api": 1.144,
+          "post": 0.0,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 0.0,
+        "pre": 0.0,
+        "api": 0.0,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "doubao/asr-2.0",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 0.9049,
+          "pre": 0.0008,
+          "api": 0.904,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 0.6029,
+          "pre": 0.0007,
+          "api": 0.6017,
+          "post": 0.0004,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.7539,
+        "pre": 0.0008,
+        "api": 0.7529,
+        "post": 0.0002,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "doubao/asr-2.0",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 1.2707,
+          "pre": 0.0008,
+          "api": 1.2698,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 0.7391,
+          "pre": 0.0015,
+          "api": 0.7368,
+          "post": 0.0007,
+          "other": 0.0002
+        }
+      ],
+      "avg": {
+        "total": 1.0049,
+        "pre": 0.0011,
+        "api": 1.0033,
+        "post": 0.0003,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "doubao/asr-2.0",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 1.6291,
+          "pre": 0.0016,
+          "api": 1.6274,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 1.042,
+          "pre": 0.0007,
+          "api": 1.0409,
+          "post": 0.0003,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.3356,
+        "pre": 0.0011,
+        "api": 1.3341,
+        "post": 0.0001,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "doubao/asr-2.0",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题。但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 1.8494,
+          "pre": 0.001,
+          "api": 1.8483,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题。但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 1.9146,
+          "pre": 0.0008,
+          "api": 1.9134,
+          "post": 0.0004,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.882,
+        "pre": 0.0009,
+        "api": 1.8809,
+        "post": 0.0002,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "doubao/asr-2.0",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 2.7646,
+          "pre": 0.0013,
+          "api": 2.7632,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 2.522,
+          "pre": 0.0009,
+          "api": 2.5204,
+          "post": 0.0003,
+          "other": 0.0004
+        }
+      ],
+      "avg": {
+        "total": 2.6433,
+        "pre": 0.0011,
+        "api": 2.6418,
+        "post": 0.0001,
+        "other": 0.0003
+      }
+    },
+    {
+      "model": "doubao/asr-1.0",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 0.5879,
+          "pre": 0.0007,
+          "api": 0.5867,
+          "post": 0.0004,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 1.0484,
+          "pre": 0.0008,
+          "api": 1.0476,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.8181,
+        "pre": 0.0008,
+        "api": 0.8172,
+        "post": 0.0002,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "doubao/asr-1.0",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 0.6547,
+          "pre": 0.0009,
+          "api": 0.6532,
+          "post": 0.0005,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 1.1013,
+          "pre": 0.0008,
+          "api": 1.1003,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.878,
+        "pre": 0.0009,
+        "api": 0.8768,
+        "post": 0.0003,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "doubao/asr-1.0",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 1.5137,
+          "pre": 0.0015,
+          "api": 1.5116,
+          "post": 0.0005,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 1.4863,
+          "pre": 0.0011,
+          "api": 1.4851,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.5,
+        "pre": 0.0013,
+        "api": 1.4984,
+        "post": 0.0003,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "doubao/asr-1.0",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题。但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 1.8024,
+          "pre": 0.0011,
+          "api": 1.8009,
+          "post": 0.0003,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题。但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 2.1136,
+          "pre": 0.0008,
+          "api": 2.1127,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.958,
+        "pre": 0.001,
+        "api": 1.9568,
+        "post": 0.0001,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "doubao/asr-1.0",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 2.4305,
+          "pre": 0.0012,
+          "api": 2.4289,
+          "post": 0.0003,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 90,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 2.8765,
+          "pre": 0.0011,
+          "api": 2.8751,
+          "post": 0.0,
+          "other": 0.0003
+        }
+      ],
+      "avg": {
+        "total": 2.6535,
+        "pre": 0.0011,
+        "api": 2.652,
+        "post": 0.0001,
+        "other": 0.0002
+      }
+    },
+    {
+      "model": "siliconflow/SenseVoiceSmall",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 16,
+          "text": "今天天气不错，我们出去走走吧。😊",
+          "total": 7.4644,
+          "pre": 0.0008,
+          "api": 7.4635,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 16,
+          "text": "今天天气不错，我们出去走走吧。😊",
+          "total": 11.3174,
+          "pre": 0.0008,
+          "api": 11.3165,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 9.3909,
+        "pre": 0.0008,
+        "api": 9.39,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "siliconflow/SenseVoiceSmall",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 10.6642,
+          "pre": 0.0009,
+          "api": 10.6633,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有？",
+          "total": 15.3567,
+          "pre": 0.0008,
+          "api": 15.3558,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 13.0104,
+        "pre": 0.0009,
+        "api": 13.0096,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "siliconflow/SenseVoiceSmall",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 15.5513,
+          "pre": 0.0011,
+          "api": 15.5501,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 14.9863,
+          "pre": 0.0014,
+          "api": 14.9848,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 15.2688,
+        "pre": 0.0013,
+        "api": 15.2675,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "siliconflow/SenseVoiceSmall",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 71,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 15.046,
+          "pre": 0.0009,
+          "api": 15.0451,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 71,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 12.3134,
+          "pre": 0.0009,
+          "api": 12.3125,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 13.6797,
+        "pre": 0.0009,
+        "api": 13.6788,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "siliconflow/SenseVoiceSmall",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 91,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 9.824,
+          "pre": 0.0013,
+          "api": 9.8227,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 91,
+          "text": "大家好，今天同步三件事。第一，服务端接口改造已完成，预计下周二灰度发布。第二，客户端兼容性测试还差安卓低端机型，需要补测",
+          "total": 25.1475,
+          "pre": 0.0011,
+          "api": 25.1464,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 17.4857,
+        "pre": 0.0012,
+        "api": 17.4845,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错,我们出去走走吧。",
+          "total": 0.8893,
+          "pre": 0.0007,
+          "api": 0.8885,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错,我们出去走走吧。",
+          "total": 1.2805,
+          "pre": 0.0007,
+          "api": 1.2797,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.0849,
+        "pre": 0.0007,
+        "api": 1.0841,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有。",
+          "total": 2.5865,
+          "pre": 0.0007,
+          "api": 2.5857,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有。",
+          "total": 1.9519,
+          "pre": 0.0008,
+          "api": 1.951,
+          "post": 0.0,
+          "other": 0.0
+        }
+      ],
+      "avg": {
+        "total": 2.2692,
+        "pre": 0.0008,
+        "api": 2.2683,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 37,
+          "text": "最近公司在推进一个新项目需要各部门把进度同步一下周五之前提交到共享文档里面",
+          "total": 1.9231,
+          "pre": 0.0009,
+          "api": 1.9222,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 37,
+          "text": "最近公司在推进一个新项目需要各部门把进度同步一下周五之前提交到共享文档里面",
+          "total": 2.2801,
+          "pre": 0.0008,
+          "api": 2.2792,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 2.1016,
+        "pre": 0.0009,
+        "api": 2.1007,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 65,
+          "text": "这份报告的数据我昨天晚上已经核对过了整体增长趋势没有问题但是华南地区的样本量偏小建议你再补充两周的原始数据这样结论会更有",
+          "total": 1.9518,
+          "pre": 0.0009,
+          "api": 1.9508,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 65,
+          "text": "这份报告的数据我昨天晚上已经核对过了整体增长趋势没有问题但是华南地区的样本量偏小建议你再补充两周的原始数据这样结论会更有",
+          "total": 2.8092,
+          "pre": 0.0009,
+          "api": 2.8083,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 2.3805,
+        "pre": 0.0009,
+        "api": 2.3796,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 86,
+          "text": "大家好,今天同步三件事第一,服务端接口改造已完成,预计下周二灰度发布第二,客户端兼容性测试还差安卓低端机型,需要补测第三",
+          "total": 4.6606,
+          "pre": 0.0019,
+          "api": 4.6586,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 86,
+          "text": "大家好,今天同步三件事第一,服务端接口改造已完成,预计下周二灰度发布第二,客户端兼容性测试还差安卓低端机型,需要补测第三",
+          "total": 4.0237,
+          "pre": 0.0011,
+          "api": 4.0225,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 4.3422,
+        "pre": 0.0015,
+        "api": 4.3406,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3-turbo",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 13,
+          "text": "今天天气不错我们出去走走吧",
+          "total": 0.9137,
+          "pre": 0.0007,
+          "api": 0.9129,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 13,
+          "text": "今天天气不错我们出去走走吧",
+          "total": 1.2042,
+          "pre": 0.0007,
+          "api": 1.2034,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.0589,
+        "pre": 0.0007,
+        "api": 1.0581,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3-turbo",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 23,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有",
+          "total": 1.2373,
+          "pre": 0.0007,
+          "api": 1.2365,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 23,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有",
+          "total": 1.2979,
+          "pre": 0.0007,
+          "api": 1.2971,
+          "post": 0.0,
+          "other": 0.0
+        }
+      ],
+      "avg": {
+        "total": 1.2676,
+        "pre": 0.0007,
+        "api": 1.2668,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3-turbo",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 37,
+          "text": "最近公司在推进一个新项目需要各部门把进度同步一下周五之前提交到共享文档里面",
+          "total": 1.8572,
+          "pre": 0.0008,
+          "api": 1.8563,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 37,
+          "text": "最近公司在推进一个新项目需要各部门把进度同步一下周五之前提交到共享文档里面",
+          "total": 1.2484,
+          "pre": 0.0007,
+          "api": 1.2476,
+          "post": 0.0,
+          "other": 0.0
+        }
+      ],
+      "avg": {
+        "total": 1.5528,
+        "pre": 0.0008,
+        "api": 1.552,
+        "post": 0.0,
+        "other": 0.0
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3-turbo",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 65,
+          "text": "这份报告的数据我昨天晚上已经核对过了整体增长趋势没有问题但是华南地区的样本量偏小建议你再补充两周的原始数据这样结论会更有",
+          "total": 1.7839,
+          "pre": 0.001,
+          "api": 1.7828,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 65,
+          "text": "这份报告的数据我昨天晚上已经核对过了整体增长趋势没有问题但是华南地区的样本量偏小建议你再补充两周的原始数据这样结论会更有",
+          "total": 1.535,
+          "pre": 0.001,
+          "api": 1.5339,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 1.6595,
+        "pre": 0.001,
+        "api": 1.6583,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "groq/whisper-large-v3-turbo",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 86,
+          "text": "大家好,今天同步三件事第一,服务端接口改造已完成,预计下周二灰度发布第二,客户端兼容性测试还差安卓低端机型,需要补测第三",
+          "total": 3.1391,
+          "pre": 0.0014,
+          "api": 3.1376,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 86,
+          "text": "大家好,今天同步三件事第一,服务端接口改造已完成,预计下周二灰度发布第二,客户端兼容性测试还差安卓低端机型,需要补测第三",
+          "total": 4.908,
+          "pre": 0.001,
+          "api": 4.9069,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 4.0236,
+        "pre": 0.0012,
+        "api": 4.0222,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "stepfun/stepaudio-2.5-asr",
+      "audio": "s1_short",
+      "audio_seconds": 3.264,
+      "audio_bytes": 104526,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 0.3752,
+          "pre": 0.0008,
+          "api": 0.3744,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 15,
+          "text": "今天天气不错，我们出去走走吧。",
+          "total": 0.3504,
+          "pre": 0.0007,
+          "api": 0.3497,
+          "post": 0.0,
+          "other": 0.0
+        }
+      ],
+      "avg": {
+        "total": 0.3628,
+        "pre": 0.0008,
+        "api": 0.362,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "stepfun/stepaudio-2.5-asr",
+      "audio": "s2",
+      "audio_seconds": 5.256,
+      "audio_bytes": 168270,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有。",
+          "total": 0.4461,
+          "pre": 0.0009,
+          "api": 0.4452,
+          "post": 0.0,
+          "other": 0.0
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 24,
+          "text": "帮我查一下明天上午从北京到上海的高铁票还有没有。",
+          "total": 0.4038,
+          "pre": 0.0008,
+          "api": 0.4029,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.4249,
+        "pre": 0.0009,
+        "api": 0.424,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "stepfun/stepaudio-2.5-asr",
+      "audio": "s3",
+      "audio_seconds": 8.28,
+      "audio_bytes": 265038,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 0.4678,
+          "pre": 0.0009,
+          "api": 0.4668,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 40,
+          "text": "最近公司在推进一个新项目，需要各部门把进度同步一下，周五之前提交到共享文档里面。",
+          "total": 0.4296,
+          "pre": 0.0011,
+          "api": 0.4285,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.4487,
+        "pre": 0.001,
+        "api": 0.4476,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "stepfun/stepaudio-2.5-asr",
+      "audio": "s4",
+      "audio_seconds": 14.088,
+      "audio_bytes": 450894,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 0.5356,
+          "pre": 0.001,
+          "api": 0.5346,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 70,
+          "text": "这份报告的数据我昨天晚上已经核对过了，整体增长趋势没有问题，但是华南地区的样本量偏小，建议你再补充两周的原始数据，这样结",
+          "total": 0.4976,
+          "pre": 0.0008,
+          "api": 0.4967,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.5166,
+        "pre": 0.0009,
+        "api": 0.5156,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    },
+    {
+      "model": "stepfun/stepaudio-2.5-asr",
+      "audio": "s5_long",
+      "audio_seconds": 20.04,
+      "audio_bytes": 641358,
+      "success": 2,
+      "rounds": [
+        {
+          "ok": true,
+          "error": "",
+          "chars": 87,
+          "text": "大家好，今天同步三件事第一，服务端接口改造已完成，预计下周二灰度发布第二，客户端兼容性测试还差安卓低端机型，需要补测第三",
+          "total": 0.66,
+          "pre": 0.0021,
+          "api": 0.6578,
+          "post": 0.0,
+          "other": 0.0001
+        },
+        {
+          "ok": true,
+          "error": "",
+          "chars": 87,
+          "text": "大家好，今天同步三件事第一，服务端接口改造已完成，预计下周二灰度发布第二，客户端兼容性测试还差安卓低端机型，需要补测第三",
+          "total": 0.5866,
+          "pre": 0.0011,
+          "api": 0.5854,
+          "post": 0.0,
+          "other": 0.0001
+        }
+      ],
+      "avg": {
+        "total": 0.6233,
+        "pre": 0.0016,
+        "api": 0.6216,
+        "post": 0.0,
+        "other": 0.0001
+      }
+    }
+  ]
+}

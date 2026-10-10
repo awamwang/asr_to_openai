@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ASR 模型速度对比报告</title>
+<style>
+  :root { --bg:#f7f8fa; --card:#fff; --line:#e3e8ee; --text:#1f2933;
+          --muted:#52606d; --sub:#7b8794; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 20px 60px; background:var(--bg); color:var(--text);
+         font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; }
+  h1 { font-size:24px; margin:0 0 6px; }
+  h2 { font-size:17px; margin:32px 0 12px; padding-left:10px;
+        border-left:3px solid #d64545; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--line);
+           border-radius:10px; padding:18px 20px; margin-bottom:16px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { padding:7px 8px; border-bottom:1px solid var(--line); text-align:right; }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--muted); font-weight:600; background:#fafbfc; }
+  td.mono { font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  td.avg { background:#fafbfc; font-weight:600; }
+  td.fail { color:#b03030; background:#fdf3f3; }
+  .sub { color:var(--sub); font-size:11px; font-weight:400; }
+  .kpi { display:flex; gap:14px; flex-wrap:wrap; }
+  .kpi div { flex:1; min-width:150px; background:var(--card);
+              border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .kpi span { display:block; color:var(--muted); font-size:12px; }
+  .kpi b { font-size:22px; }
+  .note { color:var(--muted); font-size:12.5px; }
+  .legend span { display:inline-block; margin-right:16px; font-size:12px;
+                  color:var(--muted); }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:2px;
+         margin-right:5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ASR 模型速度对比报告</h1>
+  <div class="meta">
+    生成时间 2026-10-10 12:50:36 · 12 个模型 × 5 段录音
+    · 每组合 2 轮（另预热 1 次）取平均<br>
+    音频预处理 audio.preprocess=True
+    / trim_silence=True
+    / clean_punctuation=False
+  </div>
+
+  <div class="kpi">
+    <div><span>全模型平均 API 耗时</span><b>3.00s</b></div>
+    <div><span>全模型平均端到端</span><b>3.00s</b></div>
+    <div><span>最快模型</span><b style="font-size:15px">tencent/16k_zh</b>
+      <span class="sub">346ms</span></div>
+    <div><span>成功 / 总模型</span><b>11/12</b></div>
+  </div>
+
+  <h2>一、测试素材</h2>
+  <div class="card">
+    <table><thead><tr><th>文件</th><th>时长</th><th>大小</th></tr></thead>
+    <tbody><tr><td class="mono">s1_short.wav</td><td>3.26s</td><td>102 KB</td></tr><tr><td class="mono">s2.wav</td><td>5.26s</td><td>164 KB</td></tr><tr><td class="mono">s3.wav</td><td>8.28s</td><td>259 KB</td></tr><tr><td class="mono">s4.wav</td><td>14.09s</td><td>440 KB</td></tr><tr><td class="mono">s5_long.wav</td><td>20.04s</td><td>626 KB</td></tr></tbody></table>
+    <p class="note">5 段均由同一中文音色合成，字数 15 / 24 / 40 / 70 / 90 以内，
+       16kHz 单声道 PCM WAV。</p>
+  </div>
+
+  <h2>二、速度排行（API 耗时）</h2>
+  <div class="card"><svg viewBox="0 0 900 438" width="100%" style="max-width:900px" role="img" aria-label="各模型平均 API 耗时（对 5 段录音取平均，越短越快）">
+<text x="0" y="14" font-size="13" font-weight="600" fill="#1f2933">各模型平均 API 耗时（对 5 段录音取平均，越短越快）</text>
+<text x="0" y="41" font-size="12" fill="#3e4c59">tencent/16k_zh</text>
+<rect x="300" y="29" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="29" width="12.7" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="41" font-size="12" fill="#52606d">346ms</text>
+<text x="0" y="79" font-size="12" fill="#3e4c59">stepfun/stepaudio-2.5-asr</text>
+<rect x="300" y="67" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="67" width="17.4" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="79" font-size="12" fill="#52606d">474ms</text>
+<text x="0" y="117" font-size="12" fill="#3e4c59">baidu/1537</text>
+<rect x="300" y="105" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="105" width="25.8" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="117" font-size="12" fill="#52606d">702ms</text>
+<text x="0" y="155" font-size="12" fill="#3e4c59">doubao/asr-2.0</text>
+<rect x="300" y="143" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="143" width="56.0" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="155" font-size="12" fill="#52606d">1.52s</text>
+<text x="0" y="193" font-size="12" fill="#3e4c59">doubao/asr-1.0</text>
+<rect x="300" y="181" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="181" width="57.3" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="193" font-size="12" fill="#52606d">1.56s</text>
+<text x="0" y="231" font-size="12" fill="#3e4c59">groq/whisper-large-v3-turbo</text>
+<rect x="300" y="219" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="219" width="70.3" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="231" font-size="12" fill="#52606d">1.91s</text>
+<text x="0" y="269" font-size="12" fill="#3e4c59">aliyun/qwen-audio-3.0-asr-flash</text>
+<rect x="300" y="257" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="257" width="80.5" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="269" font-size="12" fill="#52606d">2.19s</text>
+<text x="0" y="307" font-size="12" fill="#3e4c59">groq/whisper-large-v3</text>
+<rect x="300" y="295" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="295" width="89.5" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="307" font-size="12" fill="#52606d">2.43s</text>
+<text x="0" y="345" font-size="12" fill="#3e4c59">aliyun/qwen-audio-3.0-asr-flash-streaming</text>
+<rect x="300" y="333" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="333" width="102.6" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="345" font-size="12" fill="#52606d">2.79s</text>
+<text x="0" y="383" font-size="12" fill="#3e4c59">aliyun/qwen-audio-3.1-asr-flash-streaming</text>
+<rect x="300" y="371" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="371" width="193.2" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="383" font-size="12" fill="#52606d">5.26s</text>
+<text x="0" y="421" font-size="12" fill="#3e4c59">siliconflow/SenseVoiceSmall</text>
+<rect x="300" y="409" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="409" width="506.0" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="421" font-size="12" fill="#52606d">13.77s</text>
+</svg></div>
+  <div class="card"><svg viewBox="0 0 900 438" width="100%" style="max-width:900px" role="img" aria-label="实时率 RTF = API 耗时 / 音频时长（越小越快，0.1 即 10 倍实时）">
+<text x="0" y="14" font-size="13" font-weight="600" fill="#1f2933">实时率 RTF = API 耗时 / 音频时长（越小越快，0.1 即 10 倍实时）</text>
+<text x="0" y="41" font-size="12" fill="#3e4c59">tencent/16k_zh</text>
+<rect x="300" y="29" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="29" width="12.7" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="41" font-size="12" fill="#52606d">0.034</text>
+<text x="0" y="79" font-size="12" fill="#3e4c59">stepfun/stepaudio-2.5-asr</text>
+<rect x="300" y="67" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="67" width="17.4" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="79" font-size="12" fill="#52606d">0.047</text>
+<text x="0" y="117" font-size="12" fill="#3e4c59">baidu/1537</text>
+<rect x="300" y="105" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="105" width="25.8" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="117" font-size="12" fill="#52606d">0.069</text>
+<text x="0" y="155" font-size="12" fill="#3e4c59">doubao/asr-2.0</text>
+<rect x="300" y="143" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="143" width="56.0" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="155" font-size="12" fill="#52606d">0.149</text>
+<text x="0" y="193" font-size="12" fill="#3e4c59">doubao/asr-1.0</text>
+<rect x="300" y="181" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="181" width="57.3" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="193" font-size="12" fill="#52606d">0.153</text>
+<text x="0" y="231" font-size="12" fill="#3e4c59">groq/whisper-large-v3-turbo</text>
+<rect x="300" y="219" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="219" width="70.3" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="231" font-size="12" fill="#52606d">0.188</text>
+<text x="0" y="269" font-size="12" fill="#3e4c59">aliyun/qwen-audio-3.0-asr-flash</text>
+<rect x="300" y="257" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="257" width="80.5" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="269" font-size="12" fill="#52606d">0.215</text>
+<text x="0" y="307" font-size="12" fill="#3e4c59">groq/whisper-large-v3</text>
+<rect x="300" y="295" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="295" width="89.5" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="307" font-size="12" fill="#52606d">0.239</text>
+<text x="0" y="345" font-size="12" fill="#3e4c59">aliyun/qwen-audio-3.0-asr-flash-streaming</text>
+<rect x="300" y="333" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="333" width="102.6" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="345" font-size="12" fill="#52606d">0.274</text>
+<text x="0" y="383" font-size="12" fill="#3e4c59">aliyun/qwen-audio-3.1-asr-flash-streaming</text>
+<rect x="300" y="371" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="371" width="193.2" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="383" font-size="12" fill="#52606d">0.516</text>
+<text x="0" y="421" font-size="12" fill="#3e4c59">siliconflow/SenseVoiceSmall</text>
+<rect x="300" y="409" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="409" width="506.0" height="22" fill="#4a7fb5" rx="3"/>
+<text x="814" y="421" font-size="12" fill="#52606d">1.352</text>
+</svg></div>
+  <div class="card"><svg viewBox="0 0 900 210" width="100%" style="max-width:900px" role="img" aria-label="同一段音频在各模型上的平均 API 耗时">
+<text x="0" y="14" font-size="13" font-weight="600" fill="#1f2933">同一段音频在各模型上的平均 API 耗时</text>
+<text x="0" y="41" font-size="12" fill="#3e4c59">s1_short（3.3s 音频）</text>
+<rect x="300" y="29" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="29" width="191.7" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="41" font-size="12" fill="#52606d">1.67s</text>
+<text x="0" y="79" font-size="12" fill="#3e4c59">s2（5.3s 音频）</text>
+<rect x="300" y="67" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="67" width="261.1" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="79" font-size="12" fill="#52606d">2.28s</text>
+<text x="0" y="117" font-size="12" fill="#3e4c59">s3（8.3s 音频）</text>
+<rect x="300" y="105" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="105" width="329.0" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="117" font-size="12" fill="#52606d">2.87s</text>
+<text x="0" y="155" font-size="12" fill="#3e4c59">s4（14.1s 音频）</text>
+<rect x="300" y="143" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="143" width="429.2" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="155" font-size="12" fill="#52606d">3.74s</text>
+<text x="0" y="193" font-size="12" fill="#3e4c59">s5_long（20.0s 音频）</text>
+<rect x="300" y="181" width="506" height="22" fill="#eef1f4" rx="3"/>
+<rect x="300" y="181" width="506.0" height="22" fill="#d64545" rx="3"/>
+<text x="814" y="193" font-size="12" fill="#52606d">4.41s</text>
+</svg></div>
+
+  <h2>三、分段明细</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>模型</th><th>s1_short<div class="sub">3.3s</div></th><th>s2<div class="sub">5.3s</div></th><th>s3<div class="sub">8.3s</div></th><th>s4<div class="sub">14.1s</div></th><th>s5_long<div class="sub">20.0s</div></th><th>本行平均</th><th>RTF</th></tr></thead>
+      <tbody><tr><td class="mono">tencent/16k_zh</td><td><b>404ms</b><div class="sub">共 406ms</div></td><td><b>291ms</b><div class="sub">共 292ms</div></td><td><b>284ms</b><div class="sub">共 285ms</div></td><td><b>368ms</b><div class="sub">共 369ms</div></td><td><b>386ms</b><div class="sub">共 387ms</div></td><td class="avg"><b>346ms</b></td><td class="avg">0.034</td></tr><tr><td class="mono">stepfun/stepaudio-2.5-asr</td><td><b>362ms</b><div class="sub">共 363ms</div></td><td><b>424ms</b><div class="sub">共 425ms</div></td><td><b>448ms</b><div class="sub">共 449ms</div></td><td><b>516ms</b><div class="sub">共 517ms</div></td><td><b>622ms</b><div class="sub">共 623ms</div></td><td class="avg"><b>474ms</b></td><td class="avg">0.047</td></tr><tr><td class="mono">baidu/1537</td><td><b>311ms</b><div class="sub">共 314ms</div></td><td><b>467ms</b><div class="sub">共 472ms</div></td><td><b>700ms</b><div class="sub">共 704ms</div></td><td><b>761ms</b><div class="sub">共 763ms</div></td><td><b>1.27s</b><div class="sub">共 1.27s</div></td><td class="avg"><b>702ms</b></td><td class="avg">0.069</td></tr><tr><td class="mono">doubao/asr-2.0</td><td><b>753ms</b><div class="sub">共 754ms</div></td><td><b>1.00s</b><div class="sub">共 1.00s</div></td><td><b>1.33s</b><div class="sub">共 1.34s</div></td><td><b>1.88s</b><div class="sub">共 1.88s</div></td><td><b>2.64s</b><div class="sub">共 2.64s</div></td><td class="avg"><b>1.52s</b></td><td class="avg">0.149</td></tr><tr><td class="mono">doubao/asr-1.0</td><td><b>817ms</b><div class="sub">共 818ms</div></td><td><b>877ms</b><div class="sub">共 878ms</div></td><td><b>1.50s</b><div class="sub">共 1.50s</div></td><td><b>1.96s</b><div class="sub">共 1.96s</div></td><td><b>2.65s</b><div class="sub">共 2.65s</div></td><td class="avg"><b>1.56s</b></td><td class="avg">0.153</td></tr><tr><td class="mono">groq/whisper-large-v3-turbo</td><td><b>1.06s</b><div class="sub">共 1.06s</div></td><td><b>1.27s</b><div class="sub">共 1.27s</div></td><td><b>1.55s</b><div class="sub">共 1.55s</div></td><td><b>1.66s</b><div class="sub">共 1.66s</div></td><td><b>4.02s</b><div class="sub">共 4.02s</div></td><td class="avg"><b>1.91s</b></td><td class="avg">0.188</td></tr><tr><td class="mono">aliyun/qwen-audio-3.0-asr-flash</td><td><b>1.03s</b><div class="sub">共 1.03s</div></td><td><b>1.20s</b><div class="sub">共 1.20s</div></td><td><b>1.43s</b><div class="sub">共 1.43s</div></td><td><b>2.49s</b><div class="sub">共 2.49s</div></td><td><b>4.81s</b><div class="sub">共 4.81s</div></td><td class="avg"><b>2.19s</b></td><td class="avg">0.215</td></tr><tr><td class="mono">groq/whisper-large-v3</td><td><b>1.08s</b><div class="sub">共 1.08s</div></td><td><b>2.27s</b><div class="sub">共 2.27s</div></td><td><b>2.10s</b><div class="sub">共 2.10s</div></td><td><b>2.38s</b><div class="sub">共 2.38s</div></td><td><b>4.34s</b><div class="sub">共 4.34s</div></td><td class="avg"><b>2.43s</b></td><td class="avg">0.239</td></tr><tr><td class="mono">aliyun/qwen-audio-3.0-asr-flash-streaming</td><td><b>1.65s</b><div class="sub">共 1.65s</div></td><td><b>1.81s</b><div class="sub">共 1.81s</div></td><td><b>2.39s</b><div class="sub">共 2.39s</div></td><td><b>3.69s</b><div class="sub">共 3.69s</div></td><td><b>4.42s</b><div class="sub">共 4.43s</div></td><td class="avg"><b>2.79s</b></td><td class="avg">0.274</td></tr><tr><td class="mono">aliyun/qwen-audio-3.1-asr-flash-streaming</td><td><b>1.54s</b><div class="sub">共 1.55s</div></td><td><b>2.44s</b><div class="sub">共 2.44s</div></td><td><b>4.57s</b><div class="sub">共 4.57s</div></td><td><b>11.82s</b><div class="sub">共 11.82s</div></td><td><b>5.91s</b><div class="sub">共 5.91s</div></td><td class="avg"><b>5.26s</b></td><td class="avg">0.516</td></tr><tr><td class="mono">siliconflow/SenseVoiceSmall</td><td><b>9.39s</b><div class="sub">共 9.39s</div></td><td><b>13.01s</b><div class="sub">共 13.01s</div></td><td><b>15.27s</b><div class="sub">共 15.27s</div></td><td><b>13.68s</b><div class="sub">共 13.68s</div></td><td><b>17.48s</b><div class="sub">共 17.49s</div></td><td class="avg"><b>13.77s</b></td><td class="avg">1.352</td></tr><tr><td class="mono">baidu/80001</td><td class="fail" title="RuntimeError: 全部服务商识别失败: baidu/80001: As">失败</td><td class="fail" title="RuntimeError: 全部服务商识别失败: baidu/80001: As">失败</td><td class="fail" title="RuntimeError: 全部服务商识别失败: baidu/80001: As">失败</td><td class="fail" title="RuntimeError: 全部服务商识别失败: baidu/80001: As">失败</td><td class="fail" title="RuntimeError: 全部服务商识别失败: baidu/80001: As">失败</td><td class="avg"><b>0ms</b></td><td class="avg">0.000</td></tr></tbody>
+    </table>
+    <p class="note">单元格上排为 <b>API 耗时</b>，下排为该次请求端到端总耗时。
+       RTF = API 耗时 ÷ 音频时长。</p>
+  </div>
+
+  <h2>四、耗时构成：API vs 代理前置/后置</h2>
+  <div class="card">
+    <div class="legend">
+      <span><i class="sw" style="background:#d64545"></i>API（上游）</span>
+      <span><i class="sw" style="background:#4a7fb5"></i>前置（音频预处理）</span>
+      <span><i class="sw" style="background:#e0a13a"></i>后置（文本清洗/保活）</span>
+      <span><i class="sw" style="background:#9aa5b1"></i>其他（路由解析等）</span>
+    </div>
+    <table>
+      <thead><tr><th>模型</th><th>API</th><th>占比</th><th>前置</th>
+        <th>后置</th><th>其他</th><th>端到端</th></tr></thead>
+      <tbody><tr><td class="mono">tencent/16k_zh</td><td>346ms</td><td>99.7%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>348ms</td></tr><tr><td class="mono">stepfun/stepaudio-2.5-asr</td><td>474ms</td><td>99.8%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>475ms</td></tr><tr><td class="mono">baidu/1537</td><td>702ms</td><td>99.5%</td><td>3ms</td><td>0ms</td><td>0ms</td><td>705ms</td></tr><tr><td class="mono">doubao/asr-2.0</td><td>1.52s</td><td>99.9%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>1.52s</td></tr><tr><td class="mono">doubao/asr-1.0</td><td>1.56s</td><td>99.9%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>1.56s</td></tr><tr><td class="mono">groq/whisper-large-v3-turbo</td><td>1.91s</td><td>99.9%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>1.91s</td></tr><tr><td class="mono">aliyun/qwen-audio-3.0-asr-flash</td><td>2.19s</td><td>99.9%</td><td>2ms</td><td>0ms</td><td>0ms</td><td>2.19s</td></tr><tr><td class="mono">groq/whisper-large-v3</td><td>2.43s</td><td>100.0%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>2.44s</td></tr><tr><td class="mono">aliyun/qwen-audio-3.0-asr-flash-streaming</td><td>2.79s</td><td>100.0%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>2.79s</td></tr><tr><td class="mono">aliyun/qwen-audio-3.1-asr-flash-streaming</td><td>5.26s</td><td>100.0%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>5.26s</td></tr><tr><td class="mono">siliconflow/SenseVoiceSmall</td><td>13.77s</td><td>100.0%</td><td>1ms</td><td>0ms</td><td>0ms</td><td>13.77s</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>五、结论</h2>
+  <div class="card">
+    <ol class="note" style="font-size:13px">
+      <li>代理自身开销（前置 + 后置 + 路由）几乎可以忽略：输入已是 16kHz 单声道
+          WAV 时走免 ffmpeg 快路径，前置/后置均为毫秒级，
+          <b>端到端耗时 ≈ 上游 API 耗时</b>。</li>
+      <li>模型速度差距主要来自上游：最快与最慢相差
+          <b>39.7 倍</b>
+          （tencent/16k_zh 346ms vs
+          siliconflow/SenseVoiceSmall 13.77s）。</li>
+      <li>音频越长绝对耗时越高，但多数模型 RTF 远低于 1，说明处理快于实时。</li>
+      <li>以下模型本次全部调用失败：baidu/80001，需检查密钥/网络。</li>
+    </ol>
+  </div>
+</div>
+</body>
+</html>
