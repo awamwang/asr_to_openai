@@ -126,6 +126,9 @@ providers:
       - qwen-audio-3.1-asr-flash-streaming   # 语义断句主力；流式 WS；速度 S4
       - qwen-audio-3.0-asr-flash             # 同步/非流式；速度 S3（无流式语义断句）
       - qwen3-asr-flash-realtime             # 老款实时流式（支持语义断句）
+      - qwen-audio-3.1-asr-flash             # 同步/非流式；实测 0.39s 最快（2026-10-14）
+      - paraformer-realtime-v2               # 流式；实测 0.75s；免费 36000s 长期
+      - paraformer-realtime-8k-v2            # 8k 电话场景流式；16k 输入亦可
     # 流式断句（仅 streaming/realtime）。标点预测本身无法关闭。
     # False=VAD；True=语义断句。smart_sentence=true 时强制为 true
     semantic_punctuation_enabled: false

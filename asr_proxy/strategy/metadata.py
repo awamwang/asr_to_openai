@@ -184,6 +184,16 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
         speed=3, accuracy=2,
         cost=_per_sec(0.00026, free_tier=_ALIYUN_QUOTA),  # 文档未单列，按 3.0-flash 推断
     ),
+    ("aliyun", "paraformer-realtime-v2"): _p(
+        "aliyun", "paraformer-realtime-v2",
+        speed=2, accuracy=3,  # 2026-10-14 实测 0.75s / RTF 0.20（3.83s 单段）
+        cost=_per_sec(0.00033, free_tier=_ALIYUN_QUOTA),  # 老款实时按秒
+    ),
+    ("aliyun", "paraformer-realtime-8k-v2"): _p(
+        "aliyun", "paraformer-realtime-8k-v2",
+        speed=2, accuracy=3,  # 2026-10-14 实测 0.57s@8k / 0.66s@16k（3.83s 单段）
+        cost=_per_sec(0.00033, free_tier=_ALIYUN_QUOTA),  # 老款实时按秒
+    ),
     ("aliyun", "qwen3-asr-flash-realtime"): _p(
         "aliyun", "qwen3-asr-flash-realtime",
         speed=4, accuracy=3,
