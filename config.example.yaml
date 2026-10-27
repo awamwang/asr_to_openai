@@ -90,9 +90,10 @@ text:
   #   tencent.filter_punc=2、doubao.enable_punc=false
   # false 时映射：tencent.filter_punc=0、doubao.enable_punc=true
   clean_punctuation: false
-  # 智能断句：只保留原生语义断句模型（会过滤腾讯 Flash / 豆包 / 硅基等）
-  # 当前可用：aliyun *-streaming / *-realtime（如 qwen-audio-3.1-asr-flash-streaming）
-  # 开启后启动时打印真正可用列表，并强制阿里 semantic_punctuation_enabled=true
+  # 智能断句：只保留原生支持 semantic_punctuation_enabled 的模型
+  # （会过滤腾讯/豆包/硅基/Groq/阶跃/百度，以及阿里同步 flash、qwen3-asr-flash-realtime）
+  # 真正可用：qwen-audio-*-streaming、fun-asr-realtime、paraformer-realtime-v2(/8k)
+  # 开启后启动时打印可用列表；并强制阿里 semantic_punctuation_enabled=true
   smart_sentence: false
 
 providers:
@@ -111,6 +112,13 @@ providers:
   #       3.0 flash 等仍有按秒刊例。策略侧按文档折算元/秒比价。
   # 闪电说优势：原生语义断句 + 标点预测；有免费额度。开 text.smart_sentence 时为本类唯一可用族。
   # （free_order / auto_order 顺序自行决定，本段注释不改序）
+  # ── 标点 / 语义断句能力（对齐官方 semantic_punctuation_enabled）──
+  #   标点：流式/实时标点预测默认开启且不可关；同步 flash 也自带标点（3.1 还可润色规范）
+  #   语义断句（Recognition /api-ws/v1/inference，本代理 semantic_punctuation_enabled 生效）：
+  #     ✅ qwen-audio-*-asr-flash-streaming、fun-asr-realtime、paraformer-realtime-v2(/8k-v2)
+  #   仅 VAD / 无该参数（勿当智能断句主力）：
+  #     △ qwen3-asr-flash-realtime — 另一套 /api-ws/v1/realtime，用 turn_detection.silence_duration_ms
+  #     ✗ *-asr-flash / fun-asr-flash-* 同步整段 — 有标点，无流式断句开关
   # 环境变量：DASHSCOPE_API_KEY / ALIYUN_API_KEY
   #           DASHSCOPE_WORKSPACE_ID / ALIYUN_WORKSPACE_ID
   #           DASHSCOPE_ASR_MODELS / ALIYUN_ASR_MODELS（逗号分隔）
@@ -122,18 +130,20 @@ providers:
     api_key: ""
     workspace_id: ""
     # 对外 ID：aliyun/<模型名>；aliyun/auto 在此列表内切换
+    # 行尾标注：标点 / 语义断句（semantic_punctuation_enabled）
     models:
-      - qwen-audio-3.1-asr-flash-streaming   # 语义断句主力；流式 WS；速度 S4
-      - qwen-audio-3.1-asr-flash             # 同步/非流式；实测 0.39s 最快（2026-10-14）
-      - fun-asr-realtime                     # 新：中英自由切换；流式；免费约 10h/90 天
-      - fun-asr-flash-2026-06-15             # 新：同步 flash；免费约 10h/90 天
-      - qwen3-asr-flash-realtime             # 千问3 实时；免费约 10h/90 天
-      - qwen3-asr-flash                      # 千问3 同步；免费约 10h/90 天
-      - qwen-audio-3.0-asr-flash             # 同步/非流式；速度 S3（无流式语义断句）
-      - paraformer-realtime-v2               # 流式；实测 0.75s；免费约每月 10h
-      - paraformer-realtime-8k-v2            # 8k 电话场景流式；16k 输入亦可
-    # 流式断句（仅 streaming/realtime）。标点预测本身无法关闭。
+      - qwen-audio-3.1-asr-flash-streaming   # 标点✅ 语义断句✅ 主力；流式 WS；速度 S4
+      - qwen-audio-3.1-asr-flash             # 标点✅ 语义断句✗ 同步；实测 0.39s；可润色规范标点
+      - fun-asr-realtime                     # 标点✅ 语义断句✅ 中英自由切换；流式；约 10h/90 天
+      - fun-asr-flash-2026-06-15             # 标点✅ 语义断句✗ 同步 flash（官方强调标点/归一化）
+      - qwen3-asr-flash-realtime             # 标点✅ 语义断句✗ 仅 VAD（另一套 realtime 协议）
+      - qwen3-asr-flash                      # 标点✅ 语义断句✗ 同步整段
+      - qwen-audio-3.0-asr-flash             # 标点✅ 语义断句✗ 同步；速度 S3
+      - paraformer-realtime-v2               # 标点✅ 语义断句✅ 流式；实测 0.75s；约每月 10h
+      - paraformer-realtime-8k-v2            # 标点✅ 语义断句✅ 8k 电话流式；16k 亦可
+    # 流式断句：仅对上方「语义断句✅」模型生效；标点预测本身无法关闭。
     # False=VAD；True=语义断句。smart_sentence=true 时强制为 true
+    # qwen3-asr-flash-realtime / 同步 flash 会忽略本参数
     semantic_punctuation_enabled: false
     # VAD 静音多久算一句结束（ms），范围 200–6000，官方默认 1300。
     # 调大可减少极短停顿被切成逗号/句号
@@ -200,6 +210,11 @@ providers:
   # 免费：XingChenASR/GSR、SenseVoiceSmall、TeleSpeechASR 长期免费
   # 说明：无刊例价的免费模型只进 strategy-free（及组合），不进 strategy-cost
   #       「建议 ≤5min」不是硬限，策略不会因此排除
+  # ── 标点 / 语义断句（相对阿里云对齐）──
+  #   接口仅 file+model（本代理可附 language），无 semantic_punctuation / filter_punc /
+  #   enable_punc 等开关；开 text.smart_sentence 时整段服务商会被过滤。
+  #   标点：多数模型自带；「高可读/语义转写」= 口语润色，不是可控语义断句。
+  #   语义断句：全部 ✗，勿当「吗？/。」级智能断句主力（免费/容灾候选即可）。
   # 环境变量：SILICONFLOW_API_KEY / SF_API_KEY
   #           SILICONFLOW_BASE_URL / SF_BASE_URL
   #           SILICONFLOW_PROXY / SF_PROXY
@@ -211,12 +226,13 @@ providers:
     proxy: ""
     timeout: 120
     # 对外 ID：siliconflow/<短名或完整 ID>
+    # 行尾标注：标点 / 语义断句（均无上游开关）
     models:
-      - XingChenASR-V3.2-Ultra   # 中+英+方言混说；长期免费
-      - XingChenASR-V3.2
-      - XingChenGSR-V1.0
-      - TeleSpeechASR
-      - SenseVoiceSmall          # 长音频偏慢，作兜底
+      - XingChenASR-V3.2-Ultra   # 标点△通常有 语义断句✗ 中英方言；口语规整；长期免费
+      - XingChenASR-V3.2         # 标点△通常有 语义断句✗ 工业级转写；长期免费
+      - XingChenGSR-V1.0         # 标点✅偏书面 语义断句✗ 生成式+语义润色；长期免费
+      - TeleSpeechASR            # 标点△一般有 语义断句✗ 方言向；长期免费
+      - SenseVoiceSmall          # 标点✅自带+ITN 语义断句✗ 长音频偏慢，兜底；长期免费
 
   # ---------------------------------------------------------------------------
   # Groq（现有，海外）
