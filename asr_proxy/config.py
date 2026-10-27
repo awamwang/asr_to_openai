@@ -510,7 +510,7 @@ def _merge_provider(name: str, raw: Dict[str, Any]) -> ProviderConfig:
         models = _normalize_models(
             models=env_models or None,
             model=env_model or None,
-        ) or yaml_models or ["SenseVoiceSmall"]
+        ) or yaml_models or ["XingChenASR-V3.2-Ultra"]
         return ProviderConfig(
             name="siliconflow",
             api_key=_first_env(

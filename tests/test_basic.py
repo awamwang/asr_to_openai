@@ -1040,6 +1040,15 @@ class TestSiliconFlow:
             resolve_model_name("FunAudioLLM/SenseVoiceSmall")
             == "FunAudioLLM/SenseVoiceSmall"
         )
+        assert (
+            resolve_model_name("XingChenASR-V3.2-Ultra")
+            == "XingChenAGI/XingChenASR-V3.2-Ultra"
+        )
+        assert resolve_model_name("TeleSpeechASR") == "TeleAI/TeleSpeechASR"
+        assert (
+            resolve_model_name("")
+            == "XingChenAGI/XingChenASR-V3.2-Ultra"
+        )
 
     def test_clean_sensevoice_tags(self):
         raw = "<|zh|><|NEUTRAL|><|Speech|>你好世界"

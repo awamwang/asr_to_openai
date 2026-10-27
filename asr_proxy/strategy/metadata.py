@@ -159,7 +159,7 @@ _MEASURED_2026_10: Dict[str, Dict[str, float]] = {
 # 实测备注（未能量化的情况）：
 #   - baidu/80001：全部 5 段均失败，报 [permission] No permission to access data
 #     （控制台未开通极速版权限），不是速度问题。
-#   - siliconflow/SenseVoiceSmall：RTF>1，慢于实时，不适合短切段场景，已停用。
+#   - siliconflow/SenseVoiceSmall：长音频曾 RTF>1；2026-10-27 改以 XingChen 免费系列为主力。
 #   - 转写准确率：本次样本下除 groq 两款不输出标点外，各模型文本完全一致，
 #     未做准确率打分，accuracy_tier 仍为静态等级。
 
@@ -212,7 +212,12 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
     ("aliyun", "fun-asr-flash"): _p(
         "aliyun", "fun-asr-flash",
         speed=3, accuracy=3,
-        cost=_per_sec(0.00026, free_tier=_ALIYUN_QUOTA),
+        cost=_per_sec(0.00022, free_tier=_ALIYUN_QUOTA),  # 国内刊例约 0.00022 元/秒
+    ),
+    ("aliyun", "fun-asr-flash-2026-06-15"): _p(
+        "aliyun", "fun-asr-flash-2026-06-15",
+        speed=3, accuracy=3,
+        cost=_per_sec(0.00022, free_tier=_ALIYUN_QUOTA),
     ),
     # 异步 filetrans：当前代理未实现（需要公网音频 URL），标记 supported=False 让策略跳过
     ("aliyun", "qwen-audio-3.0-asr-flash-filetrans"): _p(
@@ -250,15 +255,35 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
         cost=_per_sec(0.00125, free_tier="quota"),
     ),
 
-    # 硅基流动（现有）：SenseVoiceSmall 长期免费
+    # 硅基流动：XingChen 系列 / TeleSpeech / SenseVoice 长期免费
+    ("siliconflow", "xingchenagi/xingchenasr-v3.2-ultra"): _p(
+        "siliconflow", "XingChenAGI/XingChenASR-V3.2-Ultra",
+        speed=2, accuracy=2,  # 2026-10-27 短音频约 1.6s；宣称中英+方言混说
+        cost=_free("longterm"),
+    ),
+    ("siliconflow", "xingchenagi/xingchenasr-v3.2"): _p(
+        "siliconflow", "XingChenAGI/XingChenASR-V3.2",
+        speed=2, accuracy=3,  # 短音频约 1.8s
+        cost=_free("longterm"),
+    ),
+    ("siliconflow", "xingchenagi/xingchengsr-v1.0"): _p(
+        "siliconflow", "XingChenAGI/XingChenGSR-V1.0",
+        speed=2, accuracy=3,  # 短音频约 1.8s；生成式识别
+        cost=_free("longterm"),
+    ),
+    ("siliconflow", "xingchenagi/xingchenasr-diarize-v3.0"): _p(
+        "siliconflow", "XingChenAGI/XingChenASR-Diarize-V3.0",
+        speed=3, accuracy=3,  # 会议说话人分离；未做短切段实测
+        cost=_free("longterm"),
+    ),
     ("siliconflow", "funaudiollm/sensevoicesmall"): _p(
         "siliconflow", "FunAudioLLM/SenseVoiceSmall",
-        speed=5, accuracy=3,  # 实测 13.77s / RTF 1.35（慢于实时）；已停用并移出默认模型
+        speed=5, accuracy=3,  # 长音频曾 13.77s / RTF 1.35；短音频约 1.9s，作兜底
         cost=_free("longterm"),
     ),
     ("siliconflow", "teleai/telespeechasr"): _p(
         "siliconflow", "TeleAI/TeleSpeechASR",
-        speed=2, accuracy=3,  # 未实测，沿用文档等级
+        speed=2, accuracy=3,  # 2026-10-27 短音频约 1.1s
         cost=_free("longterm"),
     ),
 
@@ -390,7 +415,35 @@ _ALIASES: Dict[_ProfileKey, _ProfileKey] = {
     ("siliconflow", "sensevoice"): ("siliconflow", "funaudiollm/sensevoicesmall"),
     ("siliconflow", "sensevoicesmall"): ("siliconflow", "funaudiollm/sensevoicesmall"),
     ("siliconflow", "sensevoice-small"): ("siliconflow", "funaudiollm/sensevoicesmall"),
+    ("siliconflow", "telespeech"): ("siliconflow", "teleai/telespeechasr"),
     ("siliconflow", "telespeechasr"): ("siliconflow", "teleai/telespeechasr"),
+    ("siliconflow", "xingchenasr-v3.2-ultra"): (
+        "siliconflow", "xingchenagi/xingchenasr-v3.2-ultra",
+    ),
+    ("siliconflow", "xingchenasr-v3.2ultra"): (
+        "siliconflow", "xingchenagi/xingchenasr-v3.2-ultra",
+    ),
+    ("siliconflow", "xingchen-ultra"): (
+        "siliconflow", "xingchenagi/xingchenasr-v3.2-ultra",
+    ),
+    ("siliconflow", "xingchenasr-v3.2"): (
+        "siliconflow", "xingchenagi/xingchenasr-v3.2",
+    ),
+    ("siliconflow", "xingchenasr"): (
+        "siliconflow", "xingchenagi/xingchenasr-v3.2",
+    ),
+    ("siliconflow", "xingchengsr-v1.0"): (
+        "siliconflow", "xingchenagi/xingchengsr-v1.0",
+    ),
+    ("siliconflow", "xingchengsr"): (
+        "siliconflow", "xingchenagi/xingchengsr-v1.0",
+    ),
+    ("siliconflow", "xingchenasr-diarize-v3.0"): (
+        "siliconflow", "xingchenagi/xingchenasr-diarize-v3.0",
+    ),
+    ("siliconflow", "xingchenasr-diarize"): (
+        "siliconflow", "xingchenagi/xingchenasr-diarize-v3.0",
+    ),
     ("doubao", "1.0"): ("doubao", "asr-1.0"),
     ("doubao", "2.0"): ("doubao", "asr-2.0"),
     ("doubao", "bigasr"): ("doubao", "asr-1.0"),

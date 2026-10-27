@@ -124,10 +124,13 @@ providers:
     # 对外 ID：aliyun/<模型名>；aliyun/auto 在此列表内切换
     models:
       - qwen-audio-3.1-asr-flash-streaming   # 语义断句主力；流式 WS；速度 S4
-      - qwen-audio-3.0-asr-flash             # 同步/非流式；速度 S3（无流式语义断句）
-      - qwen3-asr-flash-realtime             # 老款实时流式（支持语义断句）
       - qwen-audio-3.1-asr-flash             # 同步/非流式；实测 0.39s 最快（2026-10-14）
-      - paraformer-realtime-v2               # 流式；实测 0.75s；免费 36000s 长期
+      - fun-asr-realtime                     # 新：中英自由切换；流式；免费约 10h/90 天
+      - fun-asr-flash-2026-06-15             # 新：同步 flash；免费约 10h/90 天
+      - qwen3-asr-flash-realtime             # 千问3 实时；免费约 10h/90 天
+      - qwen3-asr-flash                      # 千问3 同步；免费约 10h/90 天
+      - qwen-audio-3.0-asr-flash             # 同步/非流式；速度 S3（无流式语义断句）
+      - paraformer-realtime-v2               # 流式；实测 0.75s；免费约每月 10h
       - paraformer-realtime-8k-v2            # 8k 电话场景流式；16k 输入亦可
     # 流式断句（仅 streaming/realtime）。标点预测本身无法关闭。
     # False=VAD；True=语义断句。smart_sentence=true 时强制为 true
@@ -194,8 +197,8 @@ providers:
   # 接口：  https://docs.siliconflow.cn/cn/api-reference/audio/create-audio-transcriptions
   # 开通：注册 + 实名 → 建 API Key（国内直连，一般无需代理）
   # 鉴权：Authorization: Bearer <SILICONFLOW_API_KEY>
-  # 免费：FunAudioLLM/SenseVoiceSmall、TeleAI/TeleSpeechASR 长期免费
-  # 说明：无刊例价，只进 strategy-free（及组合），不进 strategy-cost
+  # 免费：XingChenASR/GSR、SenseVoiceSmall、TeleSpeechASR 长期免费
+  # 说明：无刊例价的免费模型只进 strategy-free（及组合），不进 strategy-cost
   #       「建议 ≤5min」不是硬限，策略不会因此排除
   # 环境变量：SILICONFLOW_API_KEY / SF_API_KEY
   #           SILICONFLOW_BASE_URL / SF_BASE_URL
@@ -207,9 +210,13 @@ providers:
     base_url: "https://api.siliconflow.cn/v1"
     proxy: ""
     timeout: 120
-    # 对外 ID：siliconflow/SenseVoiceSmall（短名会映射到 FunAudioLLM/SenseVoiceSmall）
+    # 对外 ID：siliconflow/<短名或完整 ID>
     models:
-      - SenseVoiceSmall
+      - XingChenASR-V3.2-Ultra   # 中+英+方言混说；长期免费
+      - XingChenASR-V3.2
+      - XingChenGSR-V1.0
+      - TeleSpeechASR
+      - SenseVoiceSmall          # 长音频偏慢，作兜底
 
   # ---------------------------------------------------------------------------
   # Groq（现有，海外）

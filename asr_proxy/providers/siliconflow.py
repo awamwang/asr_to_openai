@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""硅基流动 SenseVoice ASR：POST {base_url}/audio/transcriptions。
+"""硅基流动 ASR：POST {base_url}/audio/transcriptions。
 
-文档：https://siliconflow.readme.io/reference/createaudiotranscriptions
-默认模型：FunAudioLLM/SenseVoiceSmall（中文优化，常有免费额度）。
+文档：https://docs.siliconflow.cn/cn/api-reference/audio/create-audio-transcriptions
+默认模型：XingChenAGI/XingChenASR-V3.2-Ultra（中英混说，长期免费）。
 """
 from __future__ import annotations
 
@@ -17,16 +17,39 @@ from asr_proxy.config import ProviderConfig, normalize_proxy
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.textutil import strip_model_tags
 
-DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
+DEFAULT_MODEL = "XingChenAGI/XingChenASR-V3.2-Ultra"
 DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1"
 DEFAULT_TIMEOUT = 120.0
 
+_SENSEVOICE = "FunAudioLLM/SenseVoiceSmall"
+_TELESPEECH = "TeleAI/TeleSpeechASR"
+_XINGCHEN_ULTRA = "XingChenAGI/XingChenASR-V3.2-Ultra"
+_XINGCHEN_V32 = "XingChenAGI/XingChenASR-V3.2"
+_XINGCHEN_GSR = "XingChenAGI/XingChenGSR-V1.0"
+_XINGCHEN_DIARIZE = "XingChenAGI/XingChenASR-Diarize-V3.0"
+
 # 对外短名 → 上游完整模型 ID
 _MODEL_ALIASES = {
-    "sensevoice": DEFAULT_MODEL,
-    "sensevoicesmall": DEFAULT_MODEL,
-    "sensevoice-small": DEFAULT_MODEL,
-    "funaudiollm/sensevoicesmall": DEFAULT_MODEL,
+    "sensevoice": _SENSEVOICE,
+    "sensevoicesmall": _SENSEVOICE,
+    "sensevoice-small": _SENSEVOICE,
+    "funaudiollm/sensevoicesmall": _SENSEVOICE,
+    "telespeech": _TELESPEECH,
+    "telespeechasr": _TELESPEECH,
+    "teleai/telespeechasr": _TELESPEECH,
+    "xingchenasr-v3.2-ultra": _XINGCHEN_ULTRA,
+    "xingchenasr-v3.2ultra": _XINGCHEN_ULTRA,
+    "xingchen-ultra": _XINGCHEN_ULTRA,
+    "xingchenasr-v3.2": _XINGCHEN_V32,
+    "xingchenasr": _XINGCHEN_V32,
+    "xingchengsr-v1.0": _XINGCHEN_GSR,
+    "xingchengsr": _XINGCHEN_GSR,
+    "xingchenasr-diarize-v3.0": _XINGCHEN_DIARIZE,
+    "xingchenasr-diarize": _XINGCHEN_DIARIZE,
+    "xingchenagi/xingchenasr-v3.2-ultra": _XINGCHEN_ULTRA,
+    "xingchenagi/xingchenasr-v3.2": _XINGCHEN_V32,
+    "xingchenagi/xingchengsr-v1.0": _XINGCHEN_GSR,
+    "xingchenagi/xingchenasr-diarize-v3.0": _XINGCHEN_DIARIZE,
 }
 
 _CONTENT_TYPES = {
@@ -66,7 +89,7 @@ def _guess_content_type(filename: str) -> str:
 
 
 class SiliconFlowProvider(AsrProvider):
-    """硅基流动 OpenAI 兼容语音转写。
+    """硅基流动 OpenAI 兼容语音转写（XingChen / SenseVoice / TeleSpeech 等）。
 
     配置项（config.yaml / 环境变量）：
       - api_key  ← SILICONFLOW_API_KEY / SF_API_KEY
