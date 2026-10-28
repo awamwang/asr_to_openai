@@ -47,7 +47,8 @@ WORKSPACE_ID = os.environ.get("DASHSCOPE_WORKSPACE_ID", "").strip()
 MODEL = os.environ.get("DASHSCOPE_ASR_MODEL", "qwen-audio-3.1-asr-flash-streaming")
 FFMPEG = os.environ.get("FFMPEG_PATH", "ffmpeg")
 LOG_FILE = os.environ.get("DASHSCOPE_LOG",
-                          r"C:\Users\Administrator\Downloads\dashscope_proxy.log")
+                          os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       "dashscope_proxy.log"))
 
 
 def _log(msg: str):

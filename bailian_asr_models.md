@@ -2,7 +2,7 @@
 
 > 数据来源：通过你的 API Key 实时查询百炼模型列表接口（`GET https://dashscope.aliyuncs.com/api/v1/models`），
 > 全量 518 个模型中筛选出**真正可用于语音识别（ASR / Realtime-ASR）**的模型。
-> 原始全量数据：`C:\Users\Administrator\Downloads\bailian_all_models.json`（518 条）。
+> 原始全量数据：本地导出的 `bailian_all_models.json`（518 条），未随仓库提供。
 
 ## 说明
 - **Realtime-ASR（流式）**：实时识别，适合麦克风实时字幕（闪电说实时语音输入）。

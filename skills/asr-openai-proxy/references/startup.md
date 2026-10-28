@@ -61,7 +61,7 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -Re
 Register-ScheduledTask -TaskName "ASR-OpenAI-Proxy" -Action $action -Trigger $trigger -Settings $settings -Description "ASR to OpenAI 本地代理"
 ```
 
-- 想彻底隐藏控制台窗口：把 `-Execute` 换成 `pythonw`（`C:\Users\Administrator\.pyenv\pyenv-win\versions\3.12.0\pythonw.exe` 之类），`-Argument "main.py"`。注意 pythonw 下日志仍写文件，但控制台不可见。
+- 想彻底隐藏控制台窗口：把 `-Execute` 换成你环境里的 `pythonw` 路径（如 `$env:USERPROFILE\.pyenv\pyenv-win\versions\<版本>\pythonw.exe`），`-Argument "main.py"`。注意 pythonw 下日志仍写文件，但控制台不可见。
 - 立即测试：`Start-ScheduledTask -TaskName "ASR-OpenAI-Proxy"`；`Get-ScheduledTask -TaskName "ASR-OpenAI-Proxy"` 查看状态。
 - 删除：`Unregister-ScheduledTask -TaskName "ASR-OpenAI-Proxy" -Confirm:$false`
 
@@ -71,7 +71,7 @@ Register-ScheduledTask -TaskName "ASR-OpenAI-Proxy" -Action $action -Trigger $tr
 $startup = [Environment]::GetFolderPath("Startup")
 $ws = New-Object -ComObject WScript.Shell
 $sc = $ws.CreateShortcut("$startup\ASR-OpenAI-Proxy.lnk")
-$sc.TargetPath = "C:\Users\Administrator\.pyenv\pyenv-win\versions\3.12.0\pythonw.exe"
+$sc.TargetPath = "$env:USERPROFILE\.pyenv\pyenv-win\versions\<版本>\pythonw.exe"
 $sc.Arguments = "main.py"
 $sc.WorkingDirectory = "G:\Projects\Tools\asr_to_openai"
 $sc.Save()
@@ -83,7 +83,7 @@ $sc.Save()
 
 ```powershell
 # 首次安装（管理员 PowerShell）：
-nssm install ASROpenAIProxy "C:\Users\Administrator\.pyenv\pyenv-win\versions\3.12.0\python.exe" "main.py"
+nssm install ASROpenAIProxy "$env:USERPROFILE\.pyenv\pyenv-win\versions\<版本>\python.exe" "main.py"
 nssm set ASROpenAIProxy AppDirectory "G:\Projects\Tools\asr_to_openai"
 nssm set ASROpenAIProxy AppExit Default Restart   # 崩溃自动重启
 nssm set ASROpenAIProxy Start SERVICE_AUTO_START
