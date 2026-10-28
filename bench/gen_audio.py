@@ -13,7 +13,7 @@ import sys
 import edge_tts
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "audio")
-FFMPEG = r"S:\Libs\ffmpeg-win64-static\bin\ffmpeg.EXE"
+FFMPEG = os.environ.get("FFMPEG_PATH", "ffmpeg")
 VOICE = "zh-CN-XiaoxiaoNeural"
 RATE = "+0%"
 

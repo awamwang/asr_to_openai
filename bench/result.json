@@ -8,31 +8,31 @@
   "audios": [
     {
       "name": "s1_short",
-      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s1_short.wav",
+      "path": "bench/audio/s1_short.wav",
       "bytes": 104526,
       "seconds": 3.264
     },
     {
       "name": "s2",
-      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s2.wav",
+      "path": "bench/audio/s2.wav",
       "bytes": 168270,
       "seconds": 5.256
     },
     {
       "name": "s3",
-      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s3.wav",
+      "path": "bench/audio/s3.wav",
       "bytes": 265038,
       "seconds": 8.28
     },
     {
       "name": "s4",
-      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s4.wav",
+      "path": "bench/audio/s4.wav",
       "bytes": 450894,
       "seconds": 14.088
     },
     {
       "name": "s5_long",
-      "path": "G:\\Projects\\Tools\\asr_to_openai\\bench\\audio\\s5_long.wav",
+      "path": "bench/audio/s5_long.wav",
       "bytes": 641358,
       "seconds": 20.04
     }

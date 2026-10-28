@@ -159,7 +159,7 @@ def main() -> int:
             with open(path, "rb") as f:
                 audios.append({
                     "name": name,
-                    "path": path,
+                    "path": os.path.relpath(path, ROOT).replace(os.sep, "/"),
                     "bytes": os.path.getsize(path),
                     "seconds": round(wav_seconds(path), 3),
                     "data": f.read(),

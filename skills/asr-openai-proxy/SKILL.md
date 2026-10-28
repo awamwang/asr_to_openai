@@ -7,7 +7,7 @@ description: 配置、启动与使用本项目的 ASR→OpenAI 兼容语音识�
 
 把多厂商语音识别桥接为闪电说「自定义语音识别服务商」（`POST /chat/completions` + JSON base64）。
 **主场景**：实时翻译类客户端的短切段识别（数秒～约 1 分钟），不是几十分钟整篇录音的离线长转写。
-项目根：`G:\Projects\Tools\asr_to_openai`（本技能位于 `<root>\skills\asr-openai-proxy\`）。
+项目根：本仓库根目录（本技能位于 `<项目根>\skills\asr-openai-proxy\`）。
 
 ## 工作流
 
@@ -30,7 +30,7 @@ description: 配置、启动与使用本项目的 ASR→OpenAI 兼容语音识�
 ### 3. 启动 / 自启动（读 references/startup.md）
 
 ```powershell
-cd G:\Projects\Tools\asr_to_openai
+cd <项目根>
 python main.py          # 前台启动；验证 curl.exe http://127.0.0.1:8004/health
 ```
 
@@ -43,13 +43,13 @@ python main.py          # 前台启动；验证 curl.exe http://127.0.0.1:8004/h
 ### 4. 输出可用模型 ID 与接口路径（跑脚本 / CLI，读真实配置）
 
 ```powershell
-python G:\Projects\Tools\asr_to_openai\skills\asr-openai-proxy\scripts\report_status.py
+python <项目根>\skills\asr-openai-proxy\scripts\report_status.py
 # 或 --json
 ```
 
 也可用主入口 CLI（输出可用模型 ID 列表后退出，不启动服务）：
 ```powershell
-cd G:\Projects\Tools\asr_to_openai
+cd <项目根>
 python main.py --models        # 别名 --list-models
 ```
 

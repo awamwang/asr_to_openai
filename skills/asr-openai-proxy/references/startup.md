@@ -1,12 +1,13 @@
 # 启动与自启动参考
 
 > 面向 Windows 桌面（本项目所在环境）。所有命令均可在 PowerShell 中直接执行。
+> 命令里的 `<项目根>` 指本仓库克隆到的目录。
 
 ## 0. 前置条件
 
 ```powershell
 # Python 3.10+（项目在 3.12 下开发）；进入项目根目录
-cd G:\Projects\Tools\asr_to_openai
+cd <项目根>
 
 # 安装依赖（首次或依赖变更后）
 python -m pip install -r requirements.txt
@@ -35,7 +36,7 @@ curl.exe http://127.0.0.1:8004/v1/models
 ## 2. 后台启动（不占当前窗口）
 
 ```powershell
-Start-Process -FilePath "python" -ArgumentList "main.py" -WorkingDirectory "G:\Projects\Tools\asr_to_openai" -WindowStyle Hidden
+Start-Process -FilePath "python" -ArgumentList "main.py" -WorkingDirectory "<项目根>" -WindowStyle Hidden
 ```
 
 查看进程 / 停止：
@@ -55,7 +56,7 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.Co
 不需要管理员权限（登录触发），界面可查、可禁用，支持崩溃重启策略。
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute "python" -Argument "main.py" -WorkingDirectory "G:\Projects\Tools\asr_to_openai"
+$action  = New-ScheduledTaskAction -Execute "python" -Argument "main.py" -WorkingDirectory "<项目根>"
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 Register-ScheduledTask -TaskName "ASR-OpenAI-Proxy" -Action $action -Trigger $trigger -Settings $settings -Description "ASR to OpenAI 本地代理"
@@ -73,7 +74,7 @@ $ws = New-Object -ComObject WScript.Shell
 $sc = $ws.CreateShortcut("$startup\ASR-OpenAI-Proxy.lnk")
 $sc.TargetPath = "$env:USERPROFILE\.pyenv\pyenv-win\versions\<版本>\pythonw.exe"
 $sc.Arguments = "main.py"
-$sc.WorkingDirectory = "G:\Projects\Tools\asr_to_openai"
+$sc.WorkingDirectory = "<项目根>"
 $sc.Save()
 ```
 
@@ -84,7 +85,7 @@ $sc.Save()
 ```powershell
 # 首次安装（管理员 PowerShell）：
 nssm install ASROpenAIProxy "$env:USERPROFILE\.pyenv\pyenv-win\versions\<版本>\python.exe" "main.py"
-nssm set ASROpenAIProxy AppDirectory "G:\Projects\Tools\asr_to_openai"
+nssm set ASROpenAIProxy AppDirectory "<项目根>"
 nssm set ASROpenAIProxy AppExit Default Restart   # 崩溃自动重启
 nssm set ASROpenAIProxy Start SERVICE_AUTO_START
 nssm start ASROpenAIProxy
@@ -112,7 +113,7 @@ Get-NetTCPConnection -LocalPort 8004 -ErrorAction SilentlyContinue | Where-Objec
 curl.exe -s -o NUL -w "%{http_code}`n" http://127.0.0.1:8004/health   # 期望 200
 
 # 4) 日志是否有报错
-Get-Content G:\Projects\Tools\asr_to_openai\asr_proxy.log -Tail 20
+Get-Content <项目根>\asr_proxy.log -Tail 20
 ```
 
 ## 5. 与闪电说面板对接
