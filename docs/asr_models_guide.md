@@ -241,7 +241,7 @@ Groq 为海外高质量备选（常需代理 `127.0.0.1:7881`），可进 `strat
 
 **`smart_sentence: true` 会留下的模型（当前实现）：**
 
-- 仅 `aliyun/*-streaming`、`aliyun/*-realtime`（如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`aliyun/qwen-audio-3.0-asr-flash-streaming`、`aliyun/qwen3-asr-flash-realtime`）
+- 仅 `aliyun/*-streaming`、`aliyun/*-realtime`（如 `aliyun/qwen-audio-3.1-asr-flash-streaming`、`aliyun/qwen-audio-3.0-asr-flash-streaming`）；`qwen3-asr-flash-realtime` 走另一套 `/api-ws/v1/realtime`，本代理不支持，已排除
 - 启动时打印：`smart_sentence 可用模型: [...]`（只列**已启用服务商 + 已配置 models** 中真正可用的）
 - 同时强制 `providers.aliyun.semantic_punctuation_enabled=true`
 

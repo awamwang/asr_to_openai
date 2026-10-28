@@ -26,6 +26,7 @@ from asr_proxy.providers.aliyun import (
     resolve_asr_mode,
     _extract_flash_text,
 )
+from asr_proxy.providers.errors import AsrProviderError
 from asr_proxy.providers.doubao import (
     DoubaoProvider,
     extract_result,
@@ -42,6 +43,25 @@ from asr_proxy.providers.siliconflow import (
 from asr_proxy.providers.groq import GroqProvider
 
 WAV_PATH = ROOT / "bench" / "audio" / "s1_short.wav"
+
+
+class _FakeAudioFile:
+    """open() 替身：给一小段音频后立即 EOF，兼容 with 与直接 read()。"""
+
+    def __init__(self, data: bytes = b"RIFF"):
+        self._chunks = [data, b""]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, size: int = -1) -> bytes:
+        return self._chunks.pop(0) if self._chunks else b""
+
+    def close(self) -> None:
+        return
 
 
 @pytest.fixture
@@ -67,7 +87,7 @@ def cfg_aliyun_only() -> AppConfig:
                 workspace_id="ws-test",
                 models=[
                     "qwen-audio-3.1-asr-flash-streaming",
-                    "qwen3-asr-flash-realtime",
+                    "qwen-audio-3.0-asr-flash",
                 ],
             ),
             "groq": ProviderConfig(
@@ -96,7 +116,7 @@ def cfg_both_enabled() -> AppConfig:
                 api_key="sk-test-aliyun",
                 models=[
                     "qwen-audio-3.1-asr-flash-streaming",
-                    "qwen3-asr-flash-realtime",
+                    "qwen-audio-3.0-asr-flash",
                 ],
             ),
             "groq": ProviderConfig(
@@ -331,7 +351,7 @@ class TestUsableModelIds:
             "aliyun",
             "aliyun/auto",
             "aliyun/qwen-audio-3.1-asr-flash-streaming",
-            "aliyun/qwen3-asr-flash-realtime",
+            "aliyun/qwen-audio-3.0-asr-flash",
         ]
 
     def test_disabled_provider_excluded(self, cfg_aliyun_only):
@@ -476,17 +496,17 @@ class TestAutoFailover:
         with patch.object(AliyunProvider, "recognize", fake):
             result, errors = router.recognize(wav_bytes, model="aliyun/auto")
         assert result.text == "第二模型成功"
-        assert result.model == "qwen3-asr-flash-realtime"
+        assert result.model == "qwen-audio-3.0-asr-flash"
         assert tried == [
             "qwen-audio-3.1-asr-flash-streaming",
-            "qwen3-asr-flash-realtime",
+            "qwen-audio-3.0-asr-flash",
         ]
         assert any("first model fail" in e for e in errors)
 
         # 下次 aliyun/auto 从成功模型开始
         next_cands = router.resolve("aliyun/auto")
         assert [c.model for c in next_cands] == [
-            "qwen3-asr-flash-realtime",
+            "qwen-audio-3.0-asr-flash",
             "qwen-audio-3.1-asr-flash-streaming",
         ]
 
@@ -545,10 +565,10 @@ class TestAutoFailover:
 
         with patch.object(AliyunProvider, "recognize", fake):
             result, errors = router.recognize(
-                wav_bytes, model="aliyun/qwen3-asr-flash-realtime",
+                wav_bytes, model="aliyun/qwen-audio-3.0-asr-flash",
             )
         assert result.text == "指定模型"
-        assert used == ["qwen3-asr-flash-realtime"]
+        assert used == ["qwen-audio-3.0-asr-flash"]
         assert errors == []
 
     def test_auto_all_fail(self, cfg_both_enabled, wav_bytes):
@@ -707,25 +727,182 @@ class TestAutoFailover:
         class FakeRecognition:
             def __init__(self, **kwargs):
                 captured.update(kwargs)
+                self.callback = kwargs.get("callback")
 
-            def call(self, path):
-                captured["call_path"] = path
-                return FakeResult()
+            def start(self):
+                captured["started"] = True
+                self.callback.on_event(FakeResult())
+
+            def send_audio_frame(self, chunk):
+                captured["frames"] = captured.get("frames", 0) + 1
+
+            def stop(self):
+                captured["stopped"] = True
+
+        with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
+            with patch("asr_proxy.providers.aliyun.cleanup"):
+                with patch("builtins.open", side_effect=lambda *a, **k: _FakeAudioFile()):
+                    with patch(
+                        "dashscope.audio.asr.Recognition",
+                        FakeRecognition,
+                    ):
+                        result = p.recognize(
+                            wav_bytes,
+                            filename="test.wav",
+                            model="qwen-audio-3.1-asr-flash-streaming",
+                        )
+        assert result.text == "你好"
+        assert captured.get("max_sentence_silence") == 2500
+        assert captured.get("semantic_punctuation_enabled") is False
+        assert captured.get("started") is True
+        assert captured.get("stopped") is True
+        assert captured.get("frames", 0) > 0
+
+    def test_streaming_keeps_unfinalized_tail(self, cfg_aliyun_only, wav_bytes):
+        """固定时长切片常在句中断开：尾句没有 end_time 也要保留。"""
+        p = AliyunProvider(cfg_aliyun_only.providers["aliyun"], ffmpeg_path="ffmpeg")
+
+        class FakeResult:
+            status_code = 200
+            message = "ok"
+
+            def __init__(self, sentence):
+                self._sentence = sentence
+
+            def get_sentence(self):
+                return self._sentence
+
+        class FakeRecognition:
+            def __init__(self, **kwargs):
+                self.callback = kwargs.get("callback")
+
+            def start(self):
+                self.callback.on_event(FakeResult({
+                    "text": "今天天气", "begin_time": 0, "end_time": 800,
+                }))
+                self.callback.on_event(FakeResult({
+                    "text": "不错", "begin_time": 800, "end_time": None,
+                }))
+
+            def send_audio_frame(self, chunk):
+                return
+
+            def stop(self):
+                return
 
         with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
             with patch("asr_proxy.providers.aliyun.cleanup"):
                 with patch(
-                    "dashscope.audio.asr.Recognition",
-                    FakeRecognition,
+                    "asr_proxy.providers.aliyun._wav_duration_seconds",
+                    return_value=2.0,
                 ):
-                    result = p.recognize(
-                        wav_bytes,
-                        filename="test.wav",
-                        model="qwen-audio-3.1-asr-flash-streaming",
-                    )
-        assert result.text == "你好"
-        assert captured.get("max_sentence_silence") == 2500
-        assert captured.get("semantic_punctuation_enabled") is False
+                    with patch("builtins.open", side_effect=lambda *a, **k: _FakeAudioFile()):
+                        with patch("dashscope.audio.asr.Recognition", FakeRecognition):
+                            result = p.recognize(
+                                wav_bytes,
+                                filename="test.wav",
+                                model="qwen-audio-3.1-asr-flash-streaming",
+                            )
+        assert result.text == "今天天气不错"
+        assert [s["text"] for s in result.segments] == ["今天天气", "不错"]
+        assert result.segments[-1]["end"] == 2.0
+
+    def test_streaming_quota_error_classified(self, cfg_aliyun_only, wav_bytes):
+        p = AliyunProvider(cfg_aliyun_only.providers["aliyun"], ffmpeg_path="ffmpeg")
+
+        class FakeError:
+            status_code = 403
+            code = "AllocationQuota.FreeTierOnly"
+            message = "Free allocated quota exceeded"
+
+        class FakeRecognition:
+            def __init__(self, **kwargs):
+                self.callback = kwargs.get("callback")
+
+            def start(self):
+                self.callback.on_error(FakeError())
+
+            def send_audio_frame(self, chunk):
+                return
+
+            def stop(self):
+                return
+
+        with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
+            with patch("asr_proxy.providers.aliyun.cleanup"):
+                with patch("builtins.open", side_effect=lambda *a, **k: _FakeAudioFile()):
+                    with patch("dashscope.audio.asr.Recognition", FakeRecognition):
+                        with pytest.raises(AsrProviderError) as exc:
+                            p.recognize(
+                                wav_bytes,
+                                filename="test.wav",
+                                model="qwen-audio-3.1-asr-flash-streaming",
+                            )
+        assert exc.value.code == "quota"
+
+    def test_streaming_empty_falls_back_to_flash(self, cfg_aliyun_only, wav_bytes):
+        p = AliyunProvider(cfg_aliyun_only.providers["aliyun"], ffmpeg_path="ffmpeg")
+        flashed = {}
+
+        class FakeRecognition:
+            def __init__(self, **kwargs):
+                return
+
+            def start(self):
+                return
+
+            def send_audio_frame(self, chunk):
+                return
+
+            def stop(self):
+                return
+
+        class FakeFlashResp:
+            status_code = 200
+            code = None
+            message = "ok"
+            output = {"text": "兜底识别", "output": {"sentence": {"text": "兜底识别"}}}
+
+        def fake_flash_call(**kwargs):
+            flashed.update(kwargs)
+            return FakeFlashResp()
+
+        mock_file = _FakeAudioFile()
+
+        with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
+            with patch("asr_proxy.providers.aliyun.cleanup"):
+                with patch("asr_proxy.providers.aliyun._wav_duration_seconds", return_value=1.0):
+                    with patch("builtins.open", return_value=mock_file):
+                        with patch("dashscope.audio.asr.Recognition", FakeRecognition):
+                            with patch(
+                                "dashscope.MultiModalConversation.call",
+                                side_effect=fake_flash_call,
+                            ):
+                                result = p.recognize(
+                                    wav_bytes,
+                                    filename="test.wav",
+                                    model="qwen-audio-3.1-asr-flash-streaming",
+                                )
+        assert result.text == "兜底识别"
+        assert flashed.get("model") == "qwen-audio-3.1-asr-flash"
+
+    def test_realtime_only_model_rejected(self, cfg_aliyun_only, wav_bytes):
+        p = AliyunProvider(cfg_aliyun_only.providers["aliyun"], ffmpeg_path="ffmpeg")
+        calls = []
+
+        def fake_to_wav(*args, **kwargs):
+            calls.append(args)
+            return "fake.wav"
+
+        with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", side_effect=fake_to_wav):
+            with pytest.raises(AsrProviderError) as exc:
+                p.recognize(
+                    wav_bytes,
+                    filename="test.wav",
+                    model="qwen3-asr-flash-realtime",
+                )
+        assert exc.value.code == "not_activated"
+        assert calls == []
 
 
 class TestHttpApi:
@@ -744,7 +921,7 @@ class TestHttpApi:
         models = client.get("/v1/models").json()
         ids = [m["id"] for m in models["data"]]
         assert "auto" in ids
-        assert "aliyun/qwen3-asr-flash-realtime" in ids
+        assert "aliyun/qwen-audio-3.0-asr-flash" in ids
         assert "aliyun/auto" in ids
 
     def test_chat_completions_shandianshuo_format(self, cfg_aliyun_only, wav_bytes):

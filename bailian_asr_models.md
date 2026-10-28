@@ -17,7 +17,7 @@
 |---|---|---|
 | qwen-audio-3.1-asr-flash-streaming | Qwen-Audio-3.1-ASR-Flash-Streaming | **当前代理在用**，效果最佳，支持多语种/方言/标点 |
 | qwen-audio-3.0-asr-flash-streaming | Qwen-Audio-3.0-ASR-Flash-Streaming | 上代版本 |
-| qwen3-asr-flash-realtime | Qwen3-ASR-Flash-Realtime | **闪电说原生阿里云服务商用的就是这个**（日志确认连 `.../realtime?model=qwen3-asr-flash-realtime`）|
+| qwen3-asr-flash-realtime | Qwen3-ASR-Flash-Realtime | **闪电说原生阿里云服务商用的就是这个**（日志确认连 `.../realtime?model=qwen3-asr-flash-realtime`）；走 `/api-ws/v1/realtime`，本代理不支持，已从默认模型移除 |
 | qwen3-asr-flash-realtime-2025-10-27 | Qwen3-ASR-Flash-Realtime-2025-10-27 | 快照 |
 | qwen3-asr-flash-realtime-2026-02-10 | Qwen3-ASR-Flash-Realtime-2026-02-10 | 快照 |
 | fun-asr-realtime | Fun-ASR 实时语音识别 | |
@@ -71,7 +71,7 @@
 ---
 
 ## 关键结论
-1. **闪电说原生阿里云** 服务商用的模型是 `qwen3-asr-flash-realtime`（流式）。
+1. **闪电说原生阿里云** 服务商用的模型是 `qwen3-asr-flash-realtime`（流式），但它走 `/api-ws/v1/realtime`，与代理用的 Recognition 协议不互通，本代理已不再暴露该模型。
 2. **当前自定义代理** 用 `qwen-audio-3.1-asr-flash-streaming`（流式），识别效果最强。
 3. **录音文件转写**（走代理 `/audio/transcriptions`）建议用 `qwen3-asr-flash-filetrans` 或 `qwen-audio-3.1-asr-flash-filetrans`。
 4. 换模型只需改代理环境变量 `DASHSCOPE_ASR_MODEL`，无需改代码。

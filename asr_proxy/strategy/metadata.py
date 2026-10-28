@@ -194,10 +194,12 @@ _PROFILES: Dict[_ProfileKey, ModelProfile] = {
         speed=2, accuracy=3,  # 2026-10-14 实测 0.57s@8k / 0.66s@16k（3.83s 单段）
         cost=_per_sec(0.00033, free_tier=_ALIYUN_QUOTA),  # 老款实时按秒
     ),
+    # 只挂在 /api-ws/v1/realtime，与 Recognition 的 /inference 不互通，代理不支持
     ("aliyun", "qwen3-asr-flash-realtime"): _p(
         "aliyun", "qwen3-asr-flash-realtime",
         speed=4, accuracy=3,
         cost=_per_sec(0.00033, free_tier=_ALIYUN_QUOTA),
+        supported=False,
     ),
     ("aliyun", "qwen3-asr-flash"): _p(
         "aliyun", "qwen3-asr-flash",
@@ -533,6 +535,8 @@ def supports_smart_sentence(provider: str, model: str) -> bool:
     p = (provider or "").strip().lower()
     m = (model or "").strip().lower()
     if p != "aliyun" or not m:
+        return False
+    if "-asr-flash-realtime" in m:  # 另一套 /api-ws/v1/realtime，仅 VAD
         return False
     return "-streaming" in m or "-realtime" in m
 

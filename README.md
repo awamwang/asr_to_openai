@@ -103,7 +103,7 @@ providers:
     workspace_id: "你的工作空间ID"
     models:
       - qwen-audio-3.1-asr-flash-streaming
-      - qwen3-asr-flash-realtime
+      - qwen-audio-3.0-asr-flash
   groq:
     api_key: "gsk_你的Key"
     base_url: "https://api.groq.com/openai/v1"
