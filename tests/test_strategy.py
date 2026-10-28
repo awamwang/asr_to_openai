@@ -38,7 +38,7 @@ from asr_proxy.strategy.metadata import (
     is_free_profile,
 )
 
-WAV_PATH = ROOT / "test_asr_16k.wav"
+WAV_PATH = ROOT / "bench" / "audio" / "s1_short.wav"
 
 
 def _provider_cfg(name: str, api_key: str, models, **kw) -> ProviderConfig:

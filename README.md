@@ -277,12 +277,12 @@ pytest tests/test_basic.py tests/test_strategy.py -q
 pytest tests/test_basic.py -q -m integration
 ```
 
-测试音频：`test_asr_16k.wav`。
+测试音频：`bench/audio/s1_short.wav`（由 `bench/gen_audio.py` 生成）。
 
 模拟闪电说请求：
 
 ```powershell
-python -c "import requests,base64; b=base64.b64encode(open(r'test_asr_16k.wav','rb').read()).decode(); \
+python -c "import requests,base64; b=base64.b64encode(open(r'bench/audio/s1_short.wav','rb').read()).decode(); \
 body={'model':'auto','messages':[{'role':'user','content':[{'type':'input_audio','input_audio':{'data':'data:audio/wav;base64,'+b}}]}]};\
 print(requests.post('http://127.0.0.1:8004/chat/completions',json=body,timeout=90).json())"
 ```

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""基础测试：配置、路由、auto 切换、闪电说格式、test_asr_16k.wav。"""
+"""基础测试：配置、路由、auto 切换、闪电说格式、s1_short.wav。"""
 from __future__ import annotations
 
 import base64
@@ -41,7 +41,7 @@ from asr_proxy.providers.siliconflow import (
 )
 from asr_proxy.providers.groq import GroqProvider
 
-WAV_PATH = ROOT / "test_asr_16k.wav"
+WAV_PATH = ROOT / "bench" / "audio" / "s1_short.wav"
 
 
 @pytest.fixture
@@ -795,7 +795,7 @@ class TestHttpApi:
         with patch.object(AliyunProvider, "recognize", fake):
             r = client.post(
                 "/v1/audio/transcriptions",
-                files={"file": ("test_asr_16k.wav", wav_bytes, "audio/wav")},
+                files={"file": ("s1_short.wav", wav_bytes, "audio/wav")},
                 data={"model": "aliyun/auto"},
             )
         assert r.status_code == 200
@@ -856,7 +856,7 @@ class TestAliyunLive:
             pytest.skip("未配置阿里云 api_key，跳过真实识别")
         router = ProviderRouter(cfg)
         result, errors = router.recognize(
-            wav_bytes, model="aliyun/auto", filename="test_asr_16k.wav",
+            wav_bytes, model="aliyun/auto", filename="s1_short.wav",
         )
         assert result.text
         assert result.provider == "aliyun"
@@ -1025,7 +1025,7 @@ class TestDoubaoLive:
             pytest.skip("未配置豆包 api_key，跳过真实识别")
         router = ProviderRouter(cfg)
         result, errors = router.recognize(
-            wav_bytes, model="doubao/auto", filename="test_asr_16k.wav",
+            wav_bytes, model="doubao/auto", filename="s1_short.wav",
         )
         assert result.text
         assert result.provider == "doubao"
@@ -1112,7 +1112,7 @@ class TestSiliconFlowLive:
             pytest.skip("未配置硅基流动 api_key，跳过真实识别")
         router = ProviderRouter(cfg)
         result, errors = router.recognize(
-            wav_bytes, model="siliconflow/auto", filename="test_asr_16k.wav",
+            wav_bytes, model="siliconflow/auto", filename="s1_short.wav",
         )
         assert result.text
         assert result.provider == "siliconflow"
