@@ -155,6 +155,7 @@ text:
 | 百度 | `BAIDU_API_KEY`，`BAIDU_SECRET_KEY`，`BAIDU_APP_ID` |
 | 阶跃 | `STEPFUN_API_KEY` |
 | 通用 | `ASR_PORT`，`ASR_LOG`，`ASR_LOG_LEVEL`，`FFMPEG_PATH`，`ASR_STRATEGY` |
+| 安全/边界 | `ASR_AUTH_TOKEN`，`ASR_EXPOSE_ERRORS`，`ASR_MAX_BODY_BYTES`，`ASR_MAX_AUDIO_CANDIDATES`，`ASR_LOG_ASR_TEXT`，`ASR_ENABLE_DOCS`，`ASR_LIMIT_CONCURRENCY`，`ASR_TIMEOUT_KEEP_ALIVE` |
 
 ### 3. 启动
 
@@ -167,7 +168,7 @@ python main.py
 | 字段 | 值 |
 |---|---|
 | 地址 | `http://127.0.0.1:8004` |
-| API Key | 随便填（本地无鉴权） |
+| API Key | 随便填（默认无鉴权）；若配置了 `security.auth_token` 则填该 token |
 | 模型 | `auto` / `strategy-speed` / `aliyun/auto` / `tencent/16k_zh` / `doubao/asr-2.0` |
 
 地址带不带 `/v1` 均可。客户端会按静音等把麦克风流切成短段再请求；本代理按段返回文本，由客户端拼进实时翻译链路。
@@ -289,9 +290,9 @@ print(requests.post('http://127.0.0.1:8004/chat/completions',json=body,timeout=9
 
 ---
 
-## 六、旧脚本
+## 六、旧脚本（已废弃，不再维护）
 
-`dashscope_asr_proxy.py` 为早期单文件阿里云代理，仍可单独运行；新功能请用 `main.py`。
+`dashscope_asr_proxy.py` 为早期单文件阿里云代理，**已废弃、不再维护**，仅作历史参考。它未包含本次的安全加固（无请求体上限、无输入净化、ffmpeg 无超时、无错误脱敏），**请勿在非本机地址或生产环境使用**；所有功能请用 `main.py`。
 
 ---
 
@@ -305,4 +306,29 @@ print(requests.post('http://127.0.0.1:8004/chat/completions',json=body,timeout=9
 6. Groq 在国内通常要配 `proxy`（`GROQ_PROXY`）。
 7. 豆包新版控制台只填 `api_key`；旧版需 `app_id` + Access Token。并发版资源包请用 `asr-*-concurrent`。
 8. `text.smart_sentence=true` 会过滤掉腾讯/豆包/硅基等，只留阿里 streaming/realtime。
-9. 识别失败会返回 502，不再返回 200 + 空 `content`。
+9. 识别失败会返回 502，不再返回 200 + 空 `content`；默认也不再回显上游错误原文（见「八、安全与资源边界」）。
+
+---
+
+## 八、安全与资源边界
+
+默认面向本机（`127.0.0.1:8004`），**全部安全项默认关闭**，现有闪电说面板无需改动。若要把服务绑定到局域网/公网，务必先读这一节。
+
+| 配置 | 默认值 | 环境变量 | 说明 |
+|---|---|---|---|
+| `security.auth_token` | `""` | `ASR_AUTH_TOKEN` | 为空不校验；设置后除 `/`、`/health` 外所有请求需 `Authorization: Bearer <token>` |
+| `security.expose_errors` | `false` | `ASR_EXPOSE_ERRORS` | 502 默认只回「摘要 + request_id」，上游错误原文（可能含签名 URL、临时路径、响应体）只写日志；设 `1` 临时恢复明文排障 |
+| `security.log_asr_text` | `false` | `ASR_LOG_ASR_TEXT` | 默认只记 `len(text)`，不把识别内容写进日志 |
+| `server.max_body_bytes` | `26214400`（25MB） | `ASR_MAX_BODY_BYTES` | 请求体上限，超限返回 413；`0` = 不限制 |
+| `server.max_audio_candidates` | `8` | `ASR_MAX_AUDIO_CANDIDATES` | 单请求最多尝试几个音频候选，兜底防放大 |
+| `server.enable_docs` | `false` | `ASR_ENABLE_DOCS` | 是否开放 `/docs`、`/openapi.json` |
+| `server.limit_concurrency` | `64` | `ASR_LIMIT_CONCURRENCY` | uvicorn 并发连接上限 |
+| `server.timeout_keep_alive` | `5` | `ASR_TIMEOUT_KEEP_ALIVE` | keep-alive 超时（秒） |
+
+实现要点：
+- **音频候选靠文件头识别**（WAV/RF64/MP3/Ogg/FLAC/M4A/AMR/WebM），不靠提高最小长度门槛，**极短但合法的 WAV 仍会识别**；来自 `input_audio.data` 的明确字段即使无文件头也信任。纯文本长字符串不会再触发上游调用。
+- **base64 严格校验**（`validate=True`），非法字符直接跳过；兼容带折行的 base64 与 `data:audio/...;base64,` 前缀。
+- **模型名 / language** 拒绝 `& ? # =`、空白与控制字符，避免污染上游签名 query 与 HTTP header；合法模型名（含 `/`、资源 ID）不受影响。
+- **并发**：请求解析与识别都放进线程池，不再阻塞 event loop；各厂商 HTTP 客户端只保留建连锁，请求本身可并发。
+- **ffmpeg / ffprobe** 均有 30s 超时，转码失败时输出临时文件也会清理。
+- **排障**：默认 502 只给 `request_id`，在日志中按该 id 搜完整错误；需要临时看原文就设 `ASR_EXPOSE_ERRORS=1`，用完记得关回去。

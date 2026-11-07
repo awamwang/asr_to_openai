@@ -10,6 +10,7 @@ from __future__ import annotations
 import array
 import io
 import os
+import re
 import struct
 import subprocess
 import tempfile
@@ -30,6 +31,28 @@ _TRIM_SILENCE_AF = (
 _TRIM_THRESHOLD = 328
 _TRIM_WINDOW_MS = 50
 
+# ffmpeg / ffprobe 子进程超时（秒）：异常输入或卡死的子进程不得挂住请求
+SUBPROCESS_TIMEOUT_SEC = 30.0
+# 临时文件后缀白名单：后缀来自客户端 filename，禁止路径分隔符与控制字符
+_SAFE_SUFFIX_RE = re.compile(r"[A-Za-z0-9._-]{1,16}\Z")
+
+
+def safe_temp_suffix(suffix: str) -> str:
+    """把客户端可控的扩展名收敛到白名单，非法值统一回退 .wav。"""
+    s = (suffix or "").strip()
+    return s if _SAFE_SUFFIX_RE.fullmatch(s) else ".wav"
+
+
+def converted_wav_path(
+    src_path: str,
+    sample_rate: int = 16000,
+    trim_silence: bool = False,
+) -> str:
+    """与 to_wav_mono 一致的输出路径，供调用方在失败分支也能清理残留文件。"""
+    rate = int(sample_rate or 16000)
+    tag = "_trim" if trim_silence else ""
+    return f"{src_path}_{rate}{tag}.wav"
+
 
 def to_wav_mono(
     src_path: str,
@@ -37,11 +60,11 @@ def to_wav_mono(
     ffmpeg: str = "ffmpeg",
     *,
     trim_silence: bool = False,
+    timeout: float = SUBPROCESS_TIMEOUT_SEC,
 ) -> str:
     """用 ffmpeg 把任意音频转成指定采样率单声道 PCM WAV，返回新临时文件路径。"""
     rate = int(sample_rate or 16000)
-    suffix = "_trim" if trim_silence else ""
-    dst_path = f"{src_path}_{rate}{suffix}.wav"
+    dst_path = converted_wav_path(src_path, rate, trim_silence)
     cmd = [
         ffmpeg, "-y", "-i", src_path,
         "-ar", str(rate), "-ac", "1", "-c:a", "pcm_s16le",
@@ -49,7 +72,10 @@ def to_wav_mono(
     if trim_silence:
         cmd.extend(["-af", _TRIM_SILENCE_AF])
     cmd.append(dst_path)
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"ffmpeg convert timeout after {timeout}s") from e
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg convert failed: {(proc.stderr or '')[-500:]}")
     return dst_path
@@ -108,6 +134,19 @@ def parse_wav_format(data: bytes) -> Optional[dict]:
     return {"fmt": fmt, "data_offset": data_offset, "data_size": data_size}
 
 
+def is_target_pcm_wav(audio_bytes: bytes, sample_rate: int = 16000) -> bool:
+    """是否已是可直接复用的目标格式（PCM / 指定采样率 / 单声道 / 16-bit）。"""
+    info = parse_wav_format(audio_bytes)
+    fmt = info["fmt"] if info else None
+    return bool(
+        fmt
+        and int(fmt["format"]) == 1
+        and int(fmt["sample_rate"]) == int(sample_rate)
+        and int(fmt["channels"]) == 1
+        and int(fmt["bits"]) == 16
+    )
+
+
 def extract_pcm_data(audio_bytes: bytes, info: Optional[dict] = None) -> bytes:
     """从 WAV 字节中取出 data chunk 的 PCM 数据（越界时截断）。"""
     info = info or parse_wav_format(audio_bytes)
@@ -150,20 +189,43 @@ def trim_silence_pcm(
     if n == 0:
         return pcm
     window = max(0, int(sample_rate * window_ms / 1000))
-    start = 0
-    for i in range(n):
-        v = arr[i]
-        if v >= threshold or v <= -threshold:
-            start = max(0, i - window)
-            break
-    else:
+    # 分块粗筛：用 C 层的 max/min 跳过整段静音块，只在命中块内逐样本精定位，
+    # 避免对几十万采样点跑纯 Python 循环。结果与原逐样本算法完全一致。
+    step = window or n
+    first = None
+    for base in range(0, n, step):
+        chunk = arr[base:base + step]
+        if not chunk:
+            continue
+        if max(chunk) >= threshold or min(chunk) <= -threshold:
+            for i in range(base, min(base + step, n)):
+                v = arr[i]
+                if v >= threshold or v <= -threshold:
+                    first = i
+                    break
+            if first is not None:
+                break
+    if first is None:
         return b""
-    end = n
-    for i in range(n - 1, -1, -1):
-        v = arr[i]
-        if v >= threshold or v <= -threshold:
-            end = min(n, i + 1 + window)
-            break
+    start = max(0, first - window)
+
+    last = None
+    for base in range(n - 1, -1, -step):
+        lo = max(0, base - step + 1)
+        chunk = arr[lo:base + 1]
+        if not chunk:
+            continue
+        if max(chunk) >= threshold or min(chunk) <= -threshold:
+            for i in range(base, lo - 1, -1):
+                v = arr[i]
+                if v >= threshold or v <= -threshold:
+                    last = i
+                    break
+            if last is not None:
+                break
+    if last is None:
+        return b""
+    end = min(n, last + 1 + window)
     return arr[start:end].tobytes()
 
 
@@ -218,7 +280,9 @@ def preprocess_audio_bytes(
             raise RuntimeError("preprocess produced empty wav")
         return data, "audio_16k.wav"
     finally:
-        cleanup(tmp, wav_path)
+        # to_wav_mono 抛异常时 wav_path 仍为 None，ffmpeg 可能已生成输出文件；
+        # 用同一套路径规则显式清理，避免临时目录堆积。
+        cleanup(tmp, wav_path, converted_wav_path(tmp, sample_rate, trim_silence))
 
 
 def load_pcm_s16le(
@@ -250,12 +314,12 @@ def load_pcm_s16le(
         from asr_proxy.providers.stream_util import wav_to_pcm_s16le
         return wav_to_pcm_s16le(wav_path)
     finally:
-        cleanup(tmp, wav_path)
+        cleanup(tmp, wav_path, converted_wav_path(tmp, sample_rate))
 
 
 def write_temp_audio(audio_bytes: bytes, suffix: str = ".wav") -> str:
-    """将音频字节写入临时文件，返回路径。"""
-    fd, path = tempfile.mkstemp(suffix=suffix)
+    """将音频字节写入临时文件，返回路径。后缀统一走白名单净化。"""
+    fd, path = tempfile.mkstemp(suffix=safe_temp_suffix(suffix))
     with os.fdopen(fd, "wb") as f:
         f.write(audio_bytes)
     return path
@@ -322,12 +386,13 @@ def _ffprobe_duration(audio_bytes: bytes, ffmpeg_path: str = "ffmpeg") -> Option
             ],
             capture_output=True,
             text=True,
+            timeout=SUBPROCESS_TIMEOUT_SEC,
         )
         if proc.returncode != 0:
             return None
         duration = float((proc.stdout or "").strip())
         return duration if duration > 0 else None
-    except (OSError, ValueError):
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
     finally:
         cleanup(tmp)

@@ -20,6 +20,32 @@ server:
   # 按天滚动，最多保留天数（历史：asr_proxy.log.YYYY-MM-DD）
   log_backup_days: 7
   # 环境变量：ASR_LOG_BACKUP_DAYS
+  # ---- 资源边界 ----
+  # 单请求体上限（字节），0=不限制；环境变量 ASR_MAX_BODY_BYTES
+  max_body_bytes: 26214400        # 25MB，对齐 Groq 单次硬限
+  # 单请求最多尝试几个音频候选（兜底，防一次请求放大上游调用）
+  # 环境变量 ASR_MAX_AUDIO_CANDIDATES
+  max_audio_candidates: 8
+  # uvicorn 并发连接上限；环境变量 ASR_LIMIT_CONCURRENCY
+  limit_concurrency: 64
+  # keep-alive 超时（秒）；环境变量 ASR_TIMEOUT_KEEP_ALIVE
+  timeout_keep_alive: 5
+  # 是否暴露 /docs 与 /openapi.json；环境变量 ASR_ENABLE_DOCS
+  enable_docs: false
+
+# ---- 安全（默认全关，本地使用零改动）----
+# 这些项也可写在 server 段；环境变量优先级最高。
+security:
+  # 空 = 不校验（默认）。设置后除 / 与 /health 外的请求需带
+  #   Authorization: Bearer <token>
+  # 绑定到非 127.0.0.1 时强烈建议开启；环境变量 ASR_AUTH_TOKEN
+  auth_token: ""
+  # 502 是否回显上游错误原文。false = 只回摘要 + request_id（默认）
+  # 排障可临时设 ASR_EXPOSE_ERRORS=1
+  expose_errors: false
+  # 是否把识别文本写入日志（默认否，避免语音内容明文落盘）
+  # 环境变量 ASR_LOG_ASR_TEXT
+  log_asr_text: false
 
 ffmpeg_path: "ffmpeg"
 # 环境变量：FFMPEG_PATH（阿里云 / 豆包识别前会转 16kHz 单声道 PCM）

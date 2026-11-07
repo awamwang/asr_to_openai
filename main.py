@@ -65,6 +65,11 @@ def main() -> None:
     if mapped:
         print(f"[asr_proxy] text→providers: {', '.join(mapped)}")
     print(f"[asr_proxy] log: {cfg.log_file} level={cfg.log_level} backup_days={cfg.log_backup_days}")
+    print(
+        f"[asr_proxy] security: auth={'on' if cfg.auth_token else 'off'} "
+        f"max_body={cfg.max_body_bytes} expose_errors={cfg.expose_errors} "
+        f"log_text={cfg.log_asr_text} docs={cfg.enable_docs}"
+    )
     if not enabled:
         print("[asr_proxy] 警告：未启用任何服务商，请在 config.yaml 或环境变量中填写 api_key")
 
@@ -78,7 +83,19 @@ def main() -> None:
                 "[asr_proxy] 警告：smart_sentence=true 但当前无可用模型"
                 "（需启用阿里云 streaming/realtime，如 qwen-audio-3.1-asr-flash-streaming）"
             )
-    uvicorn.run(app, host=cfg.host, port=cfg.port, log_level="info")
+    if cfg.host not in ("127.0.0.1", "localhost", "::1") and not cfg.auth_token:
+        print(
+            f"[asr_proxy] 警告：host={cfg.host} 非本机地址且未配置 ASR_AUTH_TOKEN，"
+            "任何能访问该端口的人都能调用付费 ASR；建议设置 token 或改回 127.0.0.1"
+        )
+    uvicorn.run(
+        app,
+        host=cfg.host,
+        port=cfg.port,
+        log_level="info",
+        limit_concurrency=cfg.limit_concurrency,
+        timeout_keep_alive=cfg.timeout_keep_alive,
+    )
 
 
 if __name__ == "__main__":

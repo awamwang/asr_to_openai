@@ -6,7 +6,7 @@ import base64
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -681,20 +681,19 @@ class TestAutoFailover:
             called.update(kwargs)
             return FakeResp()
 
-        mock_file = type("F", (), {"read": lambda self: b"RIFF"})()
-
         with patch("asr_proxy.providers.aliyun.to_wav_16k_mono", return_value="fake.wav"):
-            with patch("asr_proxy.providers.aliyun.cleanup"):
-                with patch("builtins.open", return_value=mock_file):
-                    with patch(
-                        "dashscope.MultiModalConversation.call",
-                        side_effect=fake_call,
-                    ):
-                        result = p.recognize(
-                            wav_bytes,
-                            filename="test.wav",
-                            model="qwen-audio-3.0-asr-flash",
-                        )
+            with patch("asr_proxy.providers.aliyun.write_temp_audio", return_value="fake.wav"):
+                with patch("asr_proxy.providers.aliyun.cleanup"):
+                    with patch("builtins.open", mock_open(read_data=b"RIFF")):
+                        with patch(
+                            "dashscope.MultiModalConversation.call",
+                            side_effect=fake_call,
+                        ):
+                            result = p.recognize(
+                                wav_bytes,
+                                filename="test.wav",
+                                model="qwen-audio-3.0-asr-flash",
+                            )
         assert result.text == "非流式识别成功"
         assert result.model == "qwen-audio-3.0-asr-flash"
         assert called.get("model") == "qwen-audio-3.0-asr-flash"
@@ -1002,7 +1001,10 @@ class TestHttpApi:
         with patch.object(AliyunProvider, "recognize", boom):
             r = client.post("/chat/completions", json=body)
         assert r.status_code == 502
-        assert "mock recognize fail" in r.json()["error"]["message"]
+        err = r.json()["error"]
+        # 默认脱敏：不回显上游错误原文，改为 request_id + 日志
+        assert "mock recognize fail" not in err["message"]
+        assert err.get("request_id")
 
     def test_chat_unknown_provider_returns_non_200(self, cfg_aliyun_only, wav_bytes):
         app = create_app(cfg_aliyun_only)

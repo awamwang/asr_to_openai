@@ -171,6 +171,23 @@ class AppConfig:
     # 智能断句：只保留原生支持语义断句的模型（见 supports_smart_sentence）
     smart_sentence: bool = False
 
+    # ---- 安全与资源边界 ----
+    # 可选鉴权 token：为空 = 不校验（默认，本地客户端零改动）
+    auth_token: str = ""
+    # 502 是否回显上游错误原文；默认 False，只回分类摘要 + request_id
+    expose_errors: bool = False
+    # 单请求体上限（字节），0 = 不限制
+    max_body_bytes: int = 25 * 1024 * 1024
+    # 单请求最多尝试几个音频候选（兜底，防止一次请求放大上游调用）
+    max_audio_candidates: int = 8
+    # 是否把识别文本写入日志（默认不写，避免语音内容明文落盘）
+    log_asr_text: bool = False
+    # 是否暴露 /docs 与 /openapi.json
+    enable_docs: bool = False
+    # uvicorn 并发连接上限 / keep-alive 超时
+    limit_concurrency: int = 64
+    timeout_keep_alive: int = 5
+
     def enabled_providers(self) -> List[ProviderConfig]:
         """按 auto_order 返回已启用的服务商列表。"""
         result: List[ProviderConfig] = []
@@ -835,6 +852,50 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         smart_sentence=smart_sentence,
     )
 
+    security = data.get("security") if isinstance(data.get("security"), dict) else {}
+
+    def _server_value(key: str, default: Any):
+        """security 段优先，其次 server 段，最后兼容顶层扁平写法。"""
+        for src in (security, server, data):
+            if isinstance(src, dict) and src.get(key) is not None:
+                return src.get(key)
+        return default
+
+    def _int_cfg(env_key: str, cfg_key: str, default: int, minimum: int = 0) -> int:
+        raw = _env(env_key) or str(_server_value(cfg_key, default))
+        try:
+            return max(minimum, int(raw))
+        except (TypeError, ValueError):
+            return default
+
+    auth_token = _env("ASR_AUTH_TOKEN") or str(
+        _server_value("auth_token", "")
+    ).strip()
+    expose_errors = _bool_env(
+        "ASR_EXPOSE_ERRORS",
+        default=_as_bool(_server_value("expose_errors", False), default=False),
+    )
+    log_asr_text = _bool_env(
+        "ASR_LOG_ASR_TEXT",
+        default=_as_bool(_server_value("log_asr_text", False), default=False),
+    )
+    enable_docs = _bool_env(
+        "ASR_ENABLE_DOCS",
+        default=_as_bool(_server_value("enable_docs", False), default=False),
+    )
+    max_body_bytes = _int_cfg(
+        "ASR_MAX_BODY_BYTES", "max_body_bytes", 25 * 1024 * 1024,
+    )
+    max_audio_candidates = _int_cfg(
+        "ASR_MAX_AUDIO_CANDIDATES", "max_audio_candidates", 8, minimum=1,
+    )
+    limit_concurrency = _int_cfg(
+        "ASR_LIMIT_CONCURRENCY", "limit_concurrency", 64, minimum=1,
+    )
+    timeout_keep_alive = _int_cfg(
+        "ASR_TIMEOUT_KEEP_ALIVE", "timeout_keep_alive", 5, minimum=1,
+    )
+
     return AppConfig(
         host=str(server.get("host") or "127.0.0.1"),
         port=int(port_env or server.get("port") or 8004),
@@ -856,4 +917,12 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         audio_trim_silence=audio_trim_silence,
         clean_punctuation=clean_punctuation,
         smart_sentence=smart_sentence,
+        auth_token=auth_token,
+        expose_errors=expose_errors,
+        max_body_bytes=max_body_bytes,
+        max_audio_candidates=max_audio_candidates,
+        log_asr_text=log_asr_text,
+        enable_docs=enable_docs,
+        limit_concurrency=limit_concurrency,
+        timeout_keep_alive=timeout_keep_alive,
     )

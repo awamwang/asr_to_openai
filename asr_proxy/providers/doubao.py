@@ -357,6 +357,23 @@ class DoubaoProvider(AsrProvider):
             ) from e
 
     # ── 连接预热池 ────────────────────────────────────────────────────
+    def _prune_warm_pool(self) -> None:
+        """清理池中过期/半开的预热连接，避免服务空闲时长期挂着死连接。"""
+        while True:
+            try:
+                ws = self._warm_pool.get_nowait()
+            except queue.Empty:
+                return
+            ts = getattr(ws, "_warm_ts", 0) or 0
+            if self.warm_ttl > 0 and time.monotonic() - ts > self.warm_ttl:
+                self._close_ws(ws)
+                continue
+            try:
+                self._warm_pool.put_nowait(ws)
+            except queue.Full:
+                self._close_ws(ws)
+            return
+
     def keep_warm(self) -> None:
         """识别成功后调用：后台补建 1 个已连接未使用的 WS，供下次复用。
 
@@ -365,6 +382,7 @@ class DoubaoProvider(AsrProvider):
         """
         if not self.warm_enabled:
             return
+        self._prune_warm_pool()
         if self._warm_pool.full():
             return
         with self._warm_lock:

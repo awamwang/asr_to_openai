@@ -15,7 +15,7 @@ import hashlib
 import hmac
 import json
 import os
-import random
+import secrets
 import threading
 import time
 import uuid
@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 import httpx
 
-from asr_proxy.audio import cleanup, to_wav_mono, write_temp_audio
+from asr_proxy.audio import cleanup, converted_wav_path, to_wav_mono, write_temp_audio
 from asr_proxy.config import ProviderConfig
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.providers.errors import AsrProviderError
@@ -139,8 +139,10 @@ def build_realtime_ws_url(
 ) -> str:
     """组装带 signature 的 wss URL。"""
     ts = int(timestamp if timestamp is not None else time.time())
-    n = int(nonce if nonce is not None else random.randint(0, 0x7FFFFFFF))
-    exp = int(expired if expired is not None else ts + 24 * 3600)
+    n = int(nonce if nonce is not None else secrets.randbelow(0x7FFFFFFF))
+    # 签名 URL 内含 secretid 与 HMAC 签名，重放窗口越短越安全；
+    # 该 URL 只用于建连那一刻，10 分钟足够覆盖单次识别。
+    exp = int(expired if expired is not None else ts + 600)
     vid = voice_id or str(uuid.uuid4())
     params = {
         "engine_model_type": engine_model_type,
@@ -435,8 +437,7 @@ class TencentProvider(AsrProvider):
 
         client = self._make_client()
         try:
-            with self._http_lock:
-                resp = client.post(url, headers=headers, content=audio_bytes)
+            resp = client.post(url, headers=headers, content=audio_bytes)
         except httpx.RequestError as e:
             raise AsrProviderError(
                 f"Flash 请求失败: {type(e).__name__}: {e}",
@@ -541,7 +542,7 @@ class TencentProvider(AsrProvider):
                 model=used_model,
             )
         finally:
-            cleanup(tmp, wav)
+            cleanup(tmp, wav, converted_wav_path(tmp, target_rate))
 
     def _recognize_realtime_ws(
         self,

@@ -5,11 +5,18 @@ from __future__ import annotations
 import base64
 import os
 import re
+import threading
 import wave
 from http import HTTPStatus
 from typing import Dict, List, Optional, Tuple
 
-from asr_proxy.audio import cleanup, to_wav_16k_mono, write_temp_audio
+from asr_proxy.audio import (
+    cleanup,
+    converted_wav_path,
+    is_target_pcm_wav,
+    to_wav_16k_mono,
+    write_temp_audio,
+)
 from asr_proxy.config import ProviderConfig
 from asr_proxy.providers.base import AsrProvider, AsrResult
 from asr_proxy.providers.errors import AsrProviderError
@@ -227,19 +234,31 @@ class AliyunProvider(AsrProvider):
 
     def __init__(self, config: ProviderConfig, ffmpeg_path: str = "ffmpeg"):
         super().__init__(config, ffmpeg_path)
+        # dashscope SDK 使用模块级全局配置；加锁并只在首次/配置变更时写入，
+        # 避免每个请求都改进程级可变状态。
+        self._sdk_lock = threading.Lock()
+        self._sdk_api_key = ""
+        self._sdk_workspace_id = ""
 
     def _configure_dashscope(self):
         import dashscope
-        dashscope.api_key = self.config.api_key
-        if self.config.workspace_id:
-            ws = self.config.workspace_id
-            dashscope.base_websocket_api_url = (
-                f"wss://{ws}.cn-beijing.maas.aliyuncs.com"
-                f"/api-ws/v1/inference"
-            )
-            dashscope.base_http_api_url = (
-                f"https://{ws}.cn-beijing.maas.aliyuncs.com/api/v1"
-            )
+        with self._sdk_lock:
+            if (
+                self._sdk_api_key != self.config.api_key
+                or self._sdk_workspace_id != self.config.workspace_id
+            ):
+                dashscope.api_key = self.config.api_key
+                if self.config.workspace_id:
+                    ws = self.config.workspace_id
+                    dashscope.base_websocket_api_url = (
+                        f"wss://{ws}.cn-beijing.maas.aliyuncs.com"
+                        f"/api-ws/v1/inference"
+                    )
+                    dashscope.base_http_api_url = (
+                        f"https://{ws}.cn-beijing.maas.aliyuncs.com/api/v1"
+                    )
+                self._sdk_api_key = self.config.api_key
+                self._sdk_workspace_id = self.config.workspace_id
         return dashscope
 
     def recognize(
@@ -274,7 +293,12 @@ class AliyunProvider(AsrProvider):
         tmp = write_temp_audio(audio_bytes, suffix=suffix)
         wav = None
         try:
-            wav = to_wav_16k_mono(tmp, self.ffmpeg_path)
+            # Router 已完成 16k/单声道/16-bit 预处理；直接复用可省掉一次
+            # ffmpeg 进程启动（~0.12s）与额外的磁盘读写。
+            if is_target_pcm_wav(audio_bytes):
+                wav = tmp
+            else:
+                wav = to_wav_16k_mono(tmp, self.ffmpeg_path)
             self._configure_dashscope()
             if mode == MODE_FLASH:
                 return self._recognize_flash(wav, used_model)
@@ -292,7 +316,7 @@ class AliyunProvider(AsrProvider):
                     raise
                 return self._recognize_flash(wav, fallback)
         finally:
-            cleanup(tmp, wav)
+            cleanup(tmp, wav, converted_wav_path(tmp, 16000))
 
     def _recognize_streaming(self, wav_path: str, used_model: str) -> AsrResult:
         from dashscope.audio.asr import Recognition
@@ -373,7 +397,8 @@ class AliyunProvider(AsrProvider):
         """同步非流式：qwen-audio/qwen3/fun-asr 的 *-asr-flash 系列。"""
         from dashscope import MultiModalConversation
 
-        audio_b64 = base64.b64encode(open(wav_path, "rb").read()).decode()
+        with open(wav_path, "rb") as fh:
+            audio_b64 = base64.b64encode(fh.read()).decode("ascii")
         data_uri = f"data:audio/wav;base64,{audio_b64}"
         messages = [{
             "role": "user",

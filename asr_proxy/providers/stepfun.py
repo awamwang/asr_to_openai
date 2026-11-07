@@ -152,21 +152,20 @@ class StepFunProvider(AsrProvider):
 
         client = self._make_client()
 
-        with self._http_lock:
-            try:
-                resp = client.post(
-                    self._transcribe_url(),
-                    headers=self._auth_headers(),
-                    data=data,
-                    files=files,
-                )
-            except httpx.RequestError as e:
-                raise AsrProviderError(
-                    f"转写请求失败: {type(e).__name__}: {e}",
-                    code="upstream",
-                    provider=self.name,
-                    model=used_model,
-                ) from e
+        try:
+            resp = client.post(
+                self._transcribe_url(),
+                headers=self._auth_headers(),
+                data=data,
+                files=files,
+            )
+        except httpx.RequestError as e:
+            raise AsrProviderError(
+                f"转写请求失败: {type(e).__name__}: {e}",
+                code="upstream",
+                provider=self.name,
+                model=used_model,
+            ) from e
 
         body = (resp.text or "")[:500]
         if resp.status_code != 200:

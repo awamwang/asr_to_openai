@@ -147,21 +147,22 @@ class GroqProvider(AsrProvider):
 
         client = self._make_client()
 
-        with self._http_lock:
-            try:
-                resp = client.post(
-                    self._transcribe_url(),
-                    headers=self._auth_headers(),
-                    data=data,
-                    files=files,
-                )
-            except httpx.RequestError as e:
-                hint = ""
-                if not self.proxy:
-                    hint = "（若无法直连 Groq，请在 config.yaml 配置 providers.groq.proxy）"
-                raise RuntimeError(
-                    f"Groq 转写请求失败: {type(e).__name__}: {e}{hint}"
-                ) from e
+        # httpx.Client 线程安全且自带 keep-alive 连接池；锁只用于惰性建 client，
+        # 不包住请求本身，否则同服务商的并发识别会被串行化。
+        try:
+            resp = client.post(
+                self._transcribe_url(),
+                headers=self._auth_headers(),
+                data=data,
+                files=files,
+            )
+        except httpx.RequestError as e:
+            hint = ""
+            if not self.proxy:
+                hint = "（若无法直连 Groq，请在 config.yaml 配置 providers.groq.proxy）"
+            raise RuntimeError(
+                f"Groq 转写请求失败: {type(e).__name__}: {e}{hint}"
+            ) from e
         if resp.status_code != 200:
             body = (resp.text or "")[:500]
             raise RuntimeError(

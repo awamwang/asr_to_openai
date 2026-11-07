@@ -80,6 +80,8 @@ class BaiduProvider(AsrProvider):
         self._client = client
         # 复用同一 httpx.Client：HTTP keep-alive 连接池在客户端实例内保持
         self._http_lock = threading.Lock()
+        # token 缓存单独加锁：只串行化「换 token」，不串行化识别请求
+        self._token_lock = threading.Lock()
         self._token: str = ""
         self._token_expire_at: float = 0.0
 
@@ -168,33 +170,35 @@ class BaiduProvider(AsrProvider):
 
         client = self._make_client()
 
-        with self._http_lock:
+        # token 缓存是共享可变状态，只串行化「换 token」；识别请求本身不持锁
+        with self._token_lock:
             token = self._get_token(client)
-            body: Dict[str, Any] = {
-                "format": "wav",
-                "rate": 16000,
-                "channel": 1,
-                "cuid": f"asr-proxy-{app_id}",
-                "token": token,
-                "dev_pid": dev_pid,
-                "speech": base64.b64encode(audio_bytes).decode("ascii"),
-                "len": len(audio_bytes),
-            }
-            # 非 wav 时尽量按扩展名提示（上游主要认 wav/pcm）
-            if filename and not filename.lower().endswith(".wav"):
-                ext = filename.rsplit(".", 1)[-1].lower()
-                if ext in ("pcm", "amr", "m4a", "mp3"):
-                    body["format"] = ext
 
-            try:
-                resp = client.post(ASR_URL, json=body)
-            except httpx.RequestError as e:
-                raise AsrProviderError(
-                    f"识别请求失败: {type(e).__name__}: {e}",
-                    code="upstream",
-                    provider=self.name,
-                    model=used_model,
-                ) from e
+        body: Dict[str, Any] = {
+            "format": "wav",
+            "rate": 16000,
+            "channel": 1,
+            "cuid": f"asr-proxy-{app_id}",
+            "token": token,
+            "dev_pid": dev_pid,
+            "speech": base64.b64encode(audio_bytes).decode("ascii"),
+            "len": len(audio_bytes),
+        }
+        # 非 wav 时尽量按扩展名提示（上游主要认 wav/pcm）
+        if filename and not filename.lower().endswith(".wav"):
+            ext = filename.rsplit(".", 1)[-1].lower()
+            if ext in ("pcm", "amr", "m4a", "mp3"):
+                body["format"] = ext
+
+        try:
+            resp = client.post(ASR_URL, json=body)
+        except httpx.RequestError as e:
+            raise AsrProviderError(
+                f"识别请求失败: {type(e).__name__}: {e}",
+                code="upstream",
+                provider=self.name,
+                model=used_model,
+            ) from e
 
         try:
             data = resp.json()

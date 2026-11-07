@@ -384,6 +384,15 @@ class ProviderRouter:
         language: Optional[str] = None,
     ) -> Tuple[AsrResult, List[str]]:
         """识别音频。返回 (结果, 失败记录列表)。全部失败则抛出最后一个异常。"""
+        # 请求侧的 model / language 会被拼进上游 URL query、HTTP header 与表单。
+        # 先拒绝 & ? # = 及空白/控制字符，避免参数注入与头部污染；
+        # 合法模型名（含 / . _ - 与资源 ID）和语言码均不受影响。
+        for label, value in (("model", model), ("language", language)):
+            if value and (
+                len(value) > 128
+                or any(ch in "&?#=" or ch.isspace() or ord(ch) < 32 for ch in value)
+            ):
+                raise ValueError(f"非法 {label}：含不允许的字符或过长")
         work_bytes = audio_bytes
         work_name = filename
         if self.cfg.audio_preprocess and audio_bytes:
