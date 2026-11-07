@@ -270,13 +270,17 @@ python main.py --models        # 或 --list-models
 
 ## 五、测试
 
-```powershell
-# 基础单测（mock，不需要真实 Key）
-pytest tests/test_basic.py tests/test_strategy.py -q
+`pytest.ini` 已把 `-m "not integration"` 写进 `addopts`：**直接跑 `pytest` 默认跳过需要真实 API Key 的集成测试**，不调用上游、不消耗额度。
 
-# 含真实阿里云识别（需已配置 DASHSCOPE_API_KEY）
-pytest tests/test_basic.py -q -m integration
+```powershell
+# 全量单测（mock，默认自动排除 3 个真实识别用例）
+python -m pytest tests/ -q
+
+# 需要验证真实上游链路时，用命令行 -m 覆盖 addopts（会产生真实调用与费用）
+python -m pytest tests/ -q -m integration
 ```
+
+命令行 `-m` 后置于 `addopts`，会覆盖其中的默认值；只收集不执行可加 `--collect-only`。
 
 测试音频：`bench/audio/s1_short.wav`（由 `bench/gen_audio.py` 生成）。
 
