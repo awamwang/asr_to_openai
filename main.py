@@ -33,6 +33,7 @@ import uvicorn
 
 from asr_proxy.app import create_app
 from asr_proxy.config import load_config
+from asr_proxy.dnskeepalive import start_dns_keepalive
 
 
 def main() -> None:
@@ -88,14 +89,20 @@ def main() -> None:
             f"[asr_proxy] 警告：host={cfg.host} 非本机地址且未配置 ASR_AUTH_TOKEN，"
             "任何能访问该端口的人都能调用付费 ASR；建议设置 token 或改回 127.0.0.1"
         )
-    uvicorn.run(
-        app,
-        host=cfg.host,
-        port=cfg.port,
-        log_level="info",
-        limit_concurrency=cfg.limit_concurrency,
-        timeout_keep_alive=cfg.timeout_keep_alive,
-    )
+    app = create_app(cfg)
+    stop_dns_keepalive = start_dns_keepalive(cfg)
+    try:
+        uvicorn.run(
+            app,
+            host=cfg.host,
+            port=cfg.port,
+            log_level="info",
+            limit_concurrency=cfg.limit_concurrency,
+            timeout_keep_alive=cfg.timeout_keep_alive,
+        )
+    finally:
+        if stop_dns_keepalive:
+            stop_dns_keepalive()
 
 
 if __name__ == "__main__":

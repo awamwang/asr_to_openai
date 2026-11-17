@@ -187,6 +187,10 @@ class AppConfig:
     # uvicorn 并发连接上限 / keep-alive 超时
     limit_concurrency: int = 64
     timeout_keep_alive: int = 5
+    # 后台 DNS 保活间隔（秒）：周期性预解析各服务商域名，绕开 Windows
+    # 解析器冷路径 ~7.5s 卡顿（2026-11-17 诊断，见 asr_proxy/dnskeepalive.py）。
+    # 须低于域名链最短 TTL（~14-26s），0=关闭
+    dns_keepalive_sec: float = 10.0
 
     def enabled_providers(self) -> List[ProviderConfig]:
         """按 auto_order 返回已启用的服务商列表。"""
@@ -895,6 +899,16 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
     timeout_keep_alive = _int_cfg(
         "ASR_TIMEOUT_KEEP_ALIVE", "timeout_keep_alive", 5, minimum=1,
     )
+    dns_keepalive_raw = _env("ASR_DNS_KEEPALIVE_SEC") or str(
+        server.get("dns_keepalive_sec", ""),
+    )
+    try:
+        dns_keepalive_sec = (
+            float(dns_keepalive_raw) if dns_keepalive_raw.strip() else 10.0
+        )
+    except (TypeError, ValueError):
+        dns_keepalive_sec = 10.0
+    dns_keepalive_sec = max(0.0, dns_keepalive_sec)
 
     return AppConfig(
         host=str(server.get("host") or "127.0.0.1"),
@@ -925,4 +939,5 @@ def load_config(path: Optional[str | Path] = None) -> AppConfig:
         enable_docs=enable_docs,
         limit_concurrency=limit_concurrency,
         timeout_keep_alive=timeout_keep_alive,
+        dns_keepalive_sec=dns_keepalive_sec,
     )

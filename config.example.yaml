@@ -30,6 +30,11 @@ server:
   limit_concurrency: 64
   # keep-alive 超时（秒）；环境变量 ASR_TIMEOUT_KEEP_ALIVE
   timeout_keep_alive: 5
+  # 后台 DNS 保活间隔（秒）：周期性预解析各服务商域名，绕开 Windows
+  # 解析器冷路径 ~7.5s 卡顿（所有服务商请求统一 +7.5s 的元凶）。
+  # 须低于域名链最短 TTL（~14-26s）；0=关闭
+  # 环境变量：ASR_DNS_KEEPALIVE_SEC
+  dns_keepalive_sec: 10
   # 是否暴露 /docs 与 /openapi.json；环境变量 ASR_ENABLE_DOCS
   enable_docs: false
 
